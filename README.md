@@ -1,6 +1,6 @@
 # KnownBy
 
-Internal research and file enrichment frontend. App name is provisional.
+Internal research and file enrichment application; frontend. App name is provisional.
 
 ## Run locally
 
@@ -15,7 +15,7 @@ Open the local URL printed by Vite. `npm run build` creates the production build
 
 ## Current behavior
 
-There is no backend integration, real research, queue, confidence calculation, persistence, or export logic. The loading state intentionally waits for a future service integration; it never transitions to fabricated results. All fonts and branding are served locally, and for the time being, the application makes no external API calls.
+There is no backend integration, research engine, queue, confidence calculation, persistence, or export logic. The loading state intentionally waits for a future backend integration; it never transitions to fabricated results. All fonts and branding are served locally, and for the time being, the application makes no external API calls.
 
 ## Validation
 
