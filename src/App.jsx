@@ -474,7 +474,7 @@ export default function App() {
             }}
           >
             <span className="logo-crop">
-              <img src={brand.logo} alt={brand.name} />
+              <img src={`${import.meta.env.BASE_URL}KB_dark-text.svg`} alt={brand.name} />
             </span>
           </a>
           <span className="header-divider" />
