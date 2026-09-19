@@ -1,11 +1,10 @@
-// Shared field definitions for profiles, file results, and contextual evidence.
-// Result values, confidence, and sources will come from the research service.
+// Backend field keys shared by person results, batch results, and evidence.
 export const fields = [
-  ["name", "Full Name"],
+  ["full_name", "Full Name"],
   ["organisation", "Organisation"],
-  ["title", "Job Title"],
-  ["university", "University Name"],
-  ["degree", "Degree Type"],
+  ["job_title", "Job Title"],
+  ["university_name", "University Name"],
+  ["degree_type", "Degree Type"],
   ["subject", "Subject"],
-  ["profile", "Profile Link"],
+  ["profile_link", "Profile Link"],
 ];
