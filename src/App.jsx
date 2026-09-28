@@ -25,8 +25,14 @@ import {
   researchPerson,
 } from "./api.js";
 import { fields } from "./data.js";
+import { formatScoringValue, getJobProgress } from "./presentation.js";
 
 const brand = { name: "KnownBy" };
+const sections = ["Research", "History", "Database"];
+const sectionFromHash = () => {
+  const name = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+  return sections.find((section) => section.toLowerCase() === name) || "Research";
+};
 const activeStatuses = new Set(["submitting", "queued", "running"]);
 const terminalStatuses = new Set([
   "completed",
@@ -347,15 +353,13 @@ function EvidenceDrawer({ selection, onClose }) {
               Object.keys(decision.scoring_components).length > 0 && (
                 <details className="scoring-details">
                   <summary>Scoring details</summary>
-                  <dl>
+                  <dl className="scoring-grid">
                     {Object.entries(decision.scoring_components).map(
                       ([key, value]) => (
                         <div key={key}>
                           <dt>{titleCase(key)}</dt>
-                          <dd>
-                            {typeof value === "object"
-                              ? JSON.stringify(value)
-                              : String(value)}
+                          <dd title={typeof value === "number" ? String(value) : undefined}>
+                            {formatScoringValue(value)}
                           </dd>
                         </div>
                       ),
@@ -530,18 +534,17 @@ function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
 }
 
 function JobProgress({ job }) {
-  const counts = job.counts;
-  if (!counts || !job.totalPeople) return null;
-  const processed = ["completed", "review_required", "failed", "cancelled"].reduce(
-    (total, key) => total + (Number(counts[key]) || 0),
-    0,
-  );
-  const percentage = Math.min(
-    100,
-    Math.round((processed / job.totalPeople) * 100),
-  );
+  if (!job.counts || !job.totalPeople) return null;
+  const { percentage, finished, total } = getJobProgress(job);
   return (
-    <div className="job-progress" aria-label={`${percentage}% processed`}>
+    <div
+      className="job-progress"
+      role="progressbar"
+      aria-label="People finished"
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuenow={finished}
+    >
       <span style={{ width: `${percentage}%` }} />
     </div>
   );
@@ -810,6 +813,7 @@ function Results({
   const terminal = job && terminalStatuses.has(job.status);
   const person = job?.results?.people?.[0];
   const hasResults = Boolean(job?.results);
+  const progress = job ? getJobProgress(job) : null;
 
   return (
     <section
@@ -884,10 +888,15 @@ function Results({
             <StatusBadge
               status={job.monitoringStopped ? "monitoring_stopped" : job.status}
             />
-            {job.jobId && <span>Job {job.jobId}</span>}
-            {job.totalPeople > 0 && (
-              <span>
-                {job.totalPeople} {job.totalPeople === 1 ? "person" : "people"}
+            <span className="progress-stage">
+              {job.monitoringStopped ? "Status checks paused" : progress.stage}
+            </span>
+            {job.kind === "file" && progress.total > 0 && (
+              <span className="result-counts">
+                <span>{progress.finished} of {progress.total} finished</span>
+                {progress.researching > 0 && (
+                  <span>{progress.researching} researching</span>
+                )}
               </span>
             )}
           </div>
@@ -919,12 +928,7 @@ function Results({
 
           {isActive && (
             <p className="loading-status results-loading-note" role="status">
-              <i />{" "}
-              {job.status === "submitting"
-                ? "Submitting research request"
-                : job.status === "queued"
-                  ? "Waiting for research to start"
-                  : "Research in progress"}
+              <i /> {progress.stage}
             </p>
           )}
 
@@ -974,7 +978,7 @@ function Results({
 }
 
 export default function App() {
-  const [nav, setNav] = useState("Research");
+  const [nav, setNav] = useState(sectionFromHash);
   const [name, setName] = useState("");
   const [organisation, setOrganisation] = useState("");
   const [file, setFile] = useState(null);
@@ -985,6 +989,17 @@ export default function App() {
   const nameInput = useRef(null);
   const fileAction = useRef(null);
   const nextId = useRef(1);
+
+  useEffect(() => {
+    const syncSection = () => setNav(sectionFromHash());
+    window.addEventListener("hashchange", syncSection);
+    return () => window.removeEventListener("hashchange", syncSection);
+  }, []);
+
+  function navigateTo(section) {
+    window.location.hash = `/${section.toLowerCase()}`;
+    setNav(section);
+  }
 
   const activeJob = jobs.find((job) => job.id === activeId) ?? null;
   const busy = jobs.some(
@@ -1124,7 +1139,7 @@ export default function App() {
     setJobs((items) => [job, ...items]);
     setActiveId(id);
     setSelection(null);
-    setNav("Research");
+    navigateTo("Research");
 
     try {
       const response =
@@ -1234,11 +1249,11 @@ export default function App() {
         <div className="header-inner">
           <a
             className="brand"
-            href="#research"
+            href="#/research"
             aria-label={`${brand.name} research`}
             onClick={(event) => {
               event.preventDefault();
-              setNav("Research");
+              navigateTo("Research");
             }}
           >
             <span className="logo-crop">
@@ -1250,18 +1265,20 @@ export default function App() {
           </a>
           <span className="header-divider" />
           <nav aria-label="Main navigation">
-            {["Research", "History"].map((item) => (
+            {sections.map((item) => (
               <button
                 type="button"
                 key={item}
                 aria-current={nav === item ? "page" : undefined}
                 className={nav === item ? "nav-active" : ""}
-                onClick={() => setNav(item)}
+                onClick={() => navigateTo(item)}
               >
                 {item === "Research" ? (
                   <Search size={17} />
-                ) : (
+                ) : item === "History" ? (
                   <Clock3 size={17} />
+                ) : (
+                  <Layers3 size={17} />
                 )}
                 {item}
               </button>
@@ -1282,7 +1299,9 @@ export default function App() {
             <p>
               {nav === "Research"
                 ? "Research a person or enrich a file."
-                : "Review research from this session."}
+                : nav === "History"
+                  ? "Review research from this session."
+                  : "Database tools will appear here."}
             </p>
           </div>
           {busy && (
@@ -1375,7 +1394,7 @@ export default function App() {
               regionRef={resultsRegion}
             />
           </>
-        ) : (
+        ) : nav === "History" ? (
           <section className="history-panel" aria-labelledby="history-title">
             <div className="history-heading">
               <h2 id="history-title">Research history</h2>
@@ -1392,7 +1411,7 @@ export default function App() {
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => setNav("Research")}
+                  onClick={() => navigateTo("Research")}
                 >
                   Go to Research <ArrowRight size={16} />
                 </button>
@@ -1406,7 +1425,7 @@ export default function App() {
                   onClick={() => {
                     setActiveId(job.id);
                     setSelection(null);
-                    setNav("Research");
+                    navigateTo("Research");
                   }}
                 >
                   <span className="history-kind">
@@ -1431,6 +1450,16 @@ export default function App() {
                 </button>
               ))
             )}
+          </section>
+        ) : (
+          <section className="history-panel database-panel" aria-labelledby="database-title">
+            <div className="history-heading">
+              <h2 id="database-title">Database</h2>
+            </div>
+            <div className="empty-state">
+              <Layers3 size={30} />
+              <h3>Database tools will appear here</h3>
+            </div>
           </section>
         )}
       </main>
