@@ -1,0 +1,38 @@
+/* The host keeps its existing layout, background, borders, and React children. */
+.kb-glass-host {
+  isolation: isolate;
+}
+
+.kb-glass-host::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(145deg, #e5eaff0d, #aab7ff05 43%, #0c102008);
+  box-shadow: inset 0 1px 0 #e5eaff12;
+}
+
+@supports (backdrop-filter: blur(5px)) {
+  .kb-glass-host::before {
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+  }
+}
+
+.kb-glass-host[data-kb-glass-ready="true"]::before {
+  opacity: 0.35;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.kb-liquid-glass-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}

@@ -26,6 +26,9 @@ import {
 } from "./api.js";
 import { fields } from "./data.js";
 import { formatScoringValue, getJobProgress } from "./presentation.js";
+import AnimatedBackground from "./background/AnimatedBackground.jsx";
+import ResearchOrb from "./ResearchOrb.jsx";
+import { useGlassSurface } from "./glass/useGlassSurface.js";
 
 const brand = { name: "KnownBy" };
 const sections = ["Research", "History", "Database"];
@@ -96,7 +99,7 @@ function StatusBadge({ status }) {
       ) : ["failed", "partial"].includes(safeStatus) ? (
         <AlertCircle size={13} />
       ) : activeStatuses.has(safeStatus) || safeStatus === "researching" ? (
-        <RefreshCw className="spin" size={13} />
+        <ResearchOrb compact />
       ) : (
         <Clock3 size={13} />
       )}
@@ -387,8 +390,10 @@ function EvidenceDrawer({ selection, onClose }) {
 
 function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
   const input = useRef(null);
+  const glassRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
+  useGlassSurface(glassRef);
 
   function accept(fileList) {
     setDragging(false);
@@ -412,7 +417,7 @@ function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
   }
 
   return (
-    <section className="workflow-card upload-card" aria-labelledby="upload-title">
+    <section ref={glassRef} className="workflow-card upload-card" aria-labelledby="upload-title">
       <div className="card-heading">
         <span className="feature-icon">
           <FileSpreadsheet size={23} />
@@ -797,6 +802,10 @@ function Results({
   onSelect,
   regionRef,
 }) {
+  useGlassSurface(regionRef, {
+    enabled: job?.kind !== "file",
+    refreshKey: `${job?.id ?? "idle"}:${Boolean(job?.results)}`,
+  });
   useEffect(() => {
     if (!job) return;
     regionRef.current?.focus({ preventScroll: true });
@@ -927,8 +936,8 @@ function Results({
           )}
 
           {isActive && (
-            <p className="loading-status results-loading-note" role="status">
-              <i /> {progress.stage}
+            <p className="loading-status results-loading-note">
+              <ResearchOrb /> {progress.stage}
             </p>
           )}
 
@@ -989,6 +998,13 @@ export default function App() {
   const nameInput = useRef(null);
   const fileAction = useRef(null);
   const nextId = useRef(1);
+  const headerGlass = useRef(null);
+  const personGlass = useRef(null);
+  const pageGlass = useRef(null);
+
+  useGlassSurface(headerGlass);
+  useGlassSurface(personGlass);
+  useGlassSurface(pageGlass, { refreshKey: nav });
 
   useEffect(() => {
     const syncSection = () => setNav(sectionFromHash());
@@ -1245,7 +1261,8 @@ export default function App() {
 
   return (
     <>
-      <header className="topbar">
+      <AnimatedBackground />
+      <header ref={headerGlass} className="topbar">
         <div className="header-inner">
           <a
             className="brand"
@@ -1315,6 +1332,7 @@ export default function App() {
           <>
             <div className="workflow-grid">
               <section
+                ref={personGlass}
                 className="workflow-card person-card"
                 aria-labelledby="person-title"
               >
@@ -1395,7 +1413,7 @@ export default function App() {
             />
           </>
         ) : nav === "History" ? (
-          <section className="history-panel" aria-labelledby="history-title">
+          <section ref={pageGlass} className="history-panel" aria-labelledby="history-title">
             <div className="history-heading">
               <h2 id="history-title">Research history</h2>
               {jobs.length > 0 && <span>This session</span>}
@@ -1452,7 +1470,7 @@ export default function App() {
             )}
           </section>
         ) : (
-          <section className="history-panel database-panel" aria-labelledby="database-title">
+          <section ref={pageGlass} className="history-panel database-panel" aria-labelledby="database-title">
             <div className="history-heading">
               <h2 id="database-title">Database</h2>
             </div>
