@@ -17,13 +17,34 @@
   --border: #aab7ff1b;
   --border-strong: #aab7ff30;
 }
+@supports (-moz-appearance: none) {
+  :root {
+    scrollbar-color: #6875a8 #171b2bc9;
+    scrollbar-width: thin;
+  }
+}
 
 * {
   box-sizing: border-box;
 }
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: #171b2bc9;
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid #171b2bc9;
+  border-radius: 999px;
+  background: #6875a8;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #8693c4;
+}
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
 }
 #root {
   position: relative;
@@ -86,7 +107,7 @@ svg {
   position: relative;
   z-index: 1;
   height: 80px;
-  background: #171b2bdc;
+  background: #171b2bb7;
   border-bottom: 1px solid #b8c3ff32;
   color: var(--muted);
   box-shadow: 0 12px 32px #090e22a6, inset 0 1px 0 #f1f3ff12;
@@ -125,14 +146,9 @@ svg {
 }
 .topbar nav {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   height: 45px;
-  gap: 0;
-  padding: 3px;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: #0c11246b;
-  box-shadow: inset 0 1px 0 #e5eaff13, 0 5px 18px #080c1e4d;
+  gap: clamp(19px, 2.2vw, 34px);
 }
 .topbar nav button {
   background: transparent;
@@ -141,31 +157,43 @@ svg {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  padding: 0 18px;
+  padding: 10px 2px;
   position: relative;
   font-size: 13px;
   font-weight: 600;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  isolation: isolate;
+  transition: color 0.2s ease, text-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
-.topbar nav button + button:not(.nav-active) {
-  border-left-color: #d4dcff13;
+.topbar nav button::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 35% -26% -33%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 75%, #a2adff91 0%, #4457d954 35%, transparent 77%);
+  filter: blur(11px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 .topbar nav button:hover {
   color: #edf0ff;
-  background: #b2baff17;
-  border-color: #d4dcff20;
+  text-shadow: 0 0 12px #a2adff44;
+}
+.topbar nav button:hover::before {
+  opacity: 0.36;
 }
 .topbar nav .nav-active {
   color: #f0f2ff;
-  background: linear-gradient(165deg, #8291e34a, #6474c432);
-  border-color: #c4ceff4f;
-  box-shadow: inset 0 1px 0 #ffffff35, 0 3px 12px #080c2078;
+  text-shadow: 0 0 14px #a2adff77;
+}
+.topbar nav .nav-active::before,
+.topbar nav .nav-active:hover::before {
+  opacity: 0.8;
 }
 .topbar nav button:active {
   transform: translateY(1px);
-  background: #a8b3ff2e;
+  opacity: 0.82;
 }
 .header-right {
   margin-left: auto;
@@ -234,7 +262,7 @@ h1 {
 }
 .workflow-card {
   border: 1px solid var(--border-strong);
-  background: linear-gradient(125deg, #282d43dd 0%, #24283bdb 68%);
+  background: linear-gradient(125deg, #282d43b9 0%, #24283bbd 68%);
   border-radius: 14px;
   padding: 28px 30px;
   box-shadow:
@@ -573,6 +601,53 @@ input:disabled {
   background: #aab7ff11;
   color: #e0e6ff;
 }
+.tooltip-trigger {
+  position: relative;
+}
+.tooltip-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  z-index: 5;
+  width: max-content;
+  max-width: 180px;
+  padding: 7px 10px;
+  border: 1px solid #aab7ff42;
+  border-radius: 7px;
+  background: #1c2032eb;
+  color: #e8eaf2;
+  box-shadow: 0 8px 22px #080d21a3;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.tooltip-trigger:hover::after,
+.tooltip-trigger:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.drawer-top .tooltip-trigger::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-4px);
+}
+.drawer-top .tooltip-trigger:hover::after,
+.drawer-top .tooltip-trigger:focus-visible::after {
+  transform: translateY(0);
+}
+@supports ((backdrop-filter: blur(6px)) or (-webkit-backdrop-filter: blur(6px))) {
+  .tooltip-trigger::after {
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+}
 .upload-error {
   color: #f0adb1;
   font-size: 12px;
@@ -581,7 +656,7 @@ input:disabled {
 }
 
 .results-panel {
-  background: #202538e6;
+  background: #202538d0;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   overflow: hidden;
@@ -626,6 +701,29 @@ input:disabled {
   gap: 12px;
   align-items: center;
   flex-shrink: 0;
+}
+.result-actions .add-database-action {
+  width: 43px;
+  min-width: 43px;
+  padding: 10px;
+  color: #aeb8da;
+}
+.add-database-action[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+.add-database-action[aria-disabled="true"]:hover {
+  color: #c8d0ec;
+  background: #a5b2ff0e;
+  border-color: #adbcff3b;
+}
+.result-actions .add-database-action::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-4px);
+}
+.result-actions .add-database-action:hover::after,
+.result-actions .add-database-action:focus-visible::after {
+  transform: translateY(0);
 }
 .loading-status {
   display: inline-flex;
@@ -838,8 +936,6 @@ input:disabled {
 .table-scroll {
   width: 100%;
   overflow-x: auto;
-  scrollbar-color: #525d80 #1f2334;
-  scrollbar-width: thin;
 }
 .file-results {
   width: 100%;
@@ -1481,7 +1577,7 @@ a.field-value:hover {
 .history-panel {
   border: 1px solid var(--border-strong);
   border-radius: 14px;
-  background: #24283be2;
+  background: #24283bc6;
   padding: 27px 30px;
   min-height: 400px;
   box-shadow: 0 18px 42px #080d21a3, inset 0 1px 0 #e5eaff17;
@@ -1807,7 +1903,7 @@ dialog::backdrop {
 
 @supports ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
   .topbar,
-  .topbar nav,
+  .workflow-card,
   .results-panel,
   .history-panel,
   .source-dialog {
@@ -1933,17 +2029,21 @@ dialog::backdrop {
     display: none;
   }
   .topbar nav {
-    gap: 0;
+    gap: 10px;
     margin-left: auto;
     height: 42px;
   }
   .topbar nav button {
     gap: 0;
-    padding: 0 7px;
+    padding: 9px 2px;
     font-size: 11px;
   }
   .topbar nav button svg {
     display: none;
+  }
+  .topbar nav button::before {
+    inset: 35% 0 -30%;
+    filter: blur(7px);
   }
   main {
     padding: 24px 18px 32px;
@@ -2037,6 +2137,9 @@ dialog::backdrop {
   .result-actions .primary,
   .result-actions .secondary {
     flex: 1 1 auto;
+  }
+  .result-actions .add-database-action {
+    flex: 0 0 43px;
   }
   .result-tools {
     width: 100%;
@@ -2159,6 +2262,7 @@ dialog::backdrop {
     width: 100%;
     margin-left: 0;
     height: 39px;
+    justify-content: space-between;
   }
   .topbar nav button {
     flex: 1 1 0;

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Database,
   ExternalLink,
   FileSpreadsheet,
   FileUp,
@@ -216,8 +217,9 @@ function EvidenceDrawer({ selection, onClose }) {
           </span>
           <button
             type="button"
-            className="icon-button"
+            className="icon-button tooltip-trigger"
             aria-label="Close field details"
+            data-tooltip="Close field details"
             onClick={onClose}
           >
             <X size={20} />
@@ -393,7 +395,7 @@ function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
   const glassRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
-  useGlassSurface(glassRef);
+  useGlassSurface(glassRef, { surfaceOpacity: 0.32 });
 
   function accept(fileList) {
     setDragging(false);
@@ -459,8 +461,9 @@ function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
           </div>
           <button
             type="button"
-            className="icon-button"
+            className="icon-button tooltip-trigger"
             aria-label="Remove selected file"
+            data-tooltip="Remove file"
             disabled={busy}
             onClick={() => {
               setError("");
@@ -805,6 +808,7 @@ function Results({
   useGlassSurface(regionRef, {
     enabled: job?.kind !== "file",
     refreshKey: `${job?.id ?? "idle"}:${Boolean(job?.results)}`,
+    surfaceOpacity: 0.35,
   });
   useEffect(() => {
     if (!job) return;
@@ -880,10 +884,25 @@ function Results({
               >
                 <ArrowDownToLine size={16} /> XLSX
               </button>
+              {hasResults && ["completed", "partial"].includes(job.status) && (
+                <button
+                  type="button"
+                  className="secondary add-database-action tooltip-trigger"
+                  aria-label="Add to Database"
+                  aria-describedby="database-action-unavailable"
+                  aria-disabled="true"
+                  data-tooltip="Add to Database"
+                >
+                  <Database size={17} />
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
+      <span id="database-action-unavailable" className="sr-only">
+        Database saving is not available yet.
+      </span>
 
       {!job ? (
         <div className="idle-results">
@@ -1002,9 +1021,9 @@ export default function App() {
   const personGlass = useRef(null);
   const pageGlass = useRef(null);
 
-  useGlassSurface(headerGlass);
-  useGlassSurface(personGlass);
-  useGlassSurface(pageGlass, { refreshKey: nav });
+  useGlassSurface(headerGlass, { surfaceOpacity: 0.29, tintOpacity: 0.2 });
+  useGlassSurface(personGlass, { surfaceOpacity: 0.32 });
+  useGlassSurface(pageGlass, { refreshKey: nav, surfaceOpacity: 0.34 });
 
   useEffect(() => {
     const syncSection = () => setNav(sectionFromHash());
@@ -1295,7 +1314,7 @@ export default function App() {
                 ) : item === "History" ? (
                   <Clock3 size={17} />
                 ) : (
-                  <Layers3 size={17} />
+                  <Database size={17} />
                 )}
                 {item}
               </button>
@@ -1475,7 +1494,7 @@ export default function App() {
               <h2 id="database-title">Database</h2>
             </div>
             <div className="empty-state">
-              <Layers3 size={30} />
+              <Database size={30} />
               <h3>Database tools will appear here</h3>
             </div>
           </section>

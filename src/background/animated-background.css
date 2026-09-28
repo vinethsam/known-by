@@ -5,7 +5,7 @@
   overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(ellipse at 78% 18%, #4457d950 0%, transparent 48%),
+    radial-gradient(ellipse at 78% 18%, #544fc250 0%, transparent 48%),
     radial-gradient(ellipse at 12% 78%, #a2adff26 0%, transparent 44%),
     linear-gradient(145deg, #1c2032 0%, #1c1f2e 62%, #24283b 100%);
 }

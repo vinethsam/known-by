@@ -150,8 +150,8 @@ export default function AnimatedBackground() {
                 uDensity={1.3}
                 uFrequency={5.5}
                 color1="#1c1f2e"
-                color2="#4457d9"
-                color3="#a2adff"
+                color2="#544fc2"
+                color3="#a8a5f4"
                 brightness={0.7}
                 lightType="3d"
                 grain="off"
