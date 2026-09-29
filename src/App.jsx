@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -28,7 +28,6 @@ import {
 import { fields } from "./data.js";
 import { formatScoringValue, getJobProgress } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
-import ResearchOrb from "./ResearchOrb.jsx";
 import { useGlassSurface } from "./glass/useGlassSurface.js";
 
 const brand = { name: "KnownBy" };
@@ -100,7 +99,7 @@ function StatusBadge({ status }) {
       ) : ["failed", "partial"].includes(safeStatus) ? (
         <AlertCircle size={13} />
       ) : activeStatuses.has(safeStatus) || safeStatus === "researching" ? (
-        <ResearchOrb compact />
+        <RefreshCw className="spin" size={13} />
       ) : (
         <Clock3 size={13} />
       )}
@@ -955,8 +954,8 @@ function Results({
           )}
 
           {isActive && (
-            <p className="loading-status results-loading-note">
-              <ResearchOrb /> {progress.stage}
+            <p className="loading-status results-loading-note" role="status">
+              <i /> {progress.stage}
             </p>
           )}
 
@@ -1018,12 +1017,37 @@ export default function App() {
   const fileAction = useRef(null);
   const nextId = useRef(1);
   const headerGlass = useRef(null);
+  const navRef = useRef(null);
   const personGlass = useRef(null);
   const pageGlass = useRef(null);
 
   useGlassSurface(headerGlass, { surfaceOpacity: 0.29, tintOpacity: 0.2 });
   useGlassSurface(personGlass, { surfaceOpacity: 0.32 });
   useGlassSurface(pageGlass, { refreshKey: nav, surfaceOpacity: 0.34 });
+
+  useLayoutEffect(() => {
+    const navigation = navRef.current;
+    const activeButton = navigation?.querySelector('[aria-current="page"]');
+    if (!navigation || !activeButton) return undefined;
+
+    const positionNotch = () => {
+      const center = activeButton.offsetLeft + activeButton.offsetWidth / 2;
+      navigation.style.setProperty("--nav-notch-x", `${center}px`);
+      navigation.dataset.notchReady = "true";
+    };
+
+    positionNotch();
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(positionNotch);
+    observer?.observe(navigation);
+    navigation.querySelectorAll("button").forEach((button) => observer?.observe(button));
+    window.addEventListener("resize", positionNotch, { passive: true });
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", positionNotch);
+    };
+  }, [nav]);
 
   useEffect(() => {
     const syncSection = () => setNav(sectionFromHash());
@@ -1300,7 +1324,7 @@ export default function App() {
             </span>
           </a>
           <span className="header-divider" />
-          <nav aria-label="Main navigation">
+          <nav ref={navRef} aria-label="Main navigation">
             {sections.map((item) => (
               <button
                 type="button"

@@ -145,10 +145,29 @@ svg {
   background: #b8c0e124;
 }
 .topbar nav {
+  position: relative;
   display: flex;
   align-items: center;
   height: 45px;
   gap: clamp(19px, 2.2vw, 34px);
+}
+.topbar nav::after {
+  content: "";
+  position: absolute;
+  left: var(--nav-notch-x, 0px);
+  bottom: 0;
+  width: 22px;
+  height: 5px;
+  border-radius: 60% 60% 45% 45% / 100% 100% 80% 80%;
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 #ffffff5c, 0 2px 6px #4457d966;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: left 0.34s cubic-bezier(0.22, 0.78, 0.24, 1), opacity 0.16s ease;
+}
+.topbar nav[data-notch-ready="true"]::after {
+  opacity: 1;
 }
 .topbar nav button {
   background: transparent;
@@ -161,35 +180,16 @@ svg {
   position: relative;
   font-size: 13px;
   font-weight: 600;
-  isolation: isolate;
-  transition: color 0.2s ease, text-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
-}
-.topbar nav button::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-  inset: 35% -26% -33%;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 75%, #a2adff91 0%, #4457d954 35%, transparent 77%);
-  filter: blur(11px);
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  opacity: 0.9;
+  transition: color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
 .topbar nav button:hover {
   color: #edf0ff;
-  text-shadow: 0 0 12px #a2adff44;
-}
-.topbar nav button:hover::before {
-  opacity: 0.36;
+  opacity: 1;
 }
 .topbar nav .nav-active {
   color: #f0f2ff;
-  text-shadow: 0 0 14px #a2adff77;
-}
-.topbar nav .nav-active::before,
-.topbar nav .nav-active:hover::before {
-  opacity: 0.8;
+  opacity: 1;
 }
 .topbar nav button:active {
   transform: translateY(1px);
@@ -734,6 +734,16 @@ input:disabled {
   font-weight: 500;
   white-space: nowrap;
 }
+.loading-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #96a6f9;
+  box-shadow: 0 0 0 4px #9aaaff0a;
+  animation: status-pulse 2.6s ease-in-out infinite;
+}
 .loading-status > i {
   display: none;
 }
@@ -871,7 +881,7 @@ input:disabled {
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 4px;
-  background: #8b9bc019;
+  background: linear-gradient(110deg, #544fc222, #282d4340);
   height: 10px;
   width: 100%;
 }
@@ -880,7 +890,7 @@ input:disabled {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, #b0bdec12 48%, transparent);
+  background: linear-gradient(90deg, transparent, #a8a5f424 48%, transparent);
   animation: skeleton-shimmer 2.7s ease-in-out infinite;
 }
 .skeleton-line {
@@ -1051,6 +1061,9 @@ input:disabled {
   width: 13px;
   height: 13px;
   flex: 0 0 13px;
+}
+.spin {
+  animation: spin 1.15s linear infinite;
 }
 .status-badge::before {
   display: none;
@@ -1890,6 +1903,20 @@ dialog::backdrop {
     transform: translateX(100%);
   }
 }
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes slide-in {
   from {
     transform: translateX(24px);
@@ -2040,10 +2067,6 @@ dialog::backdrop {
   }
   .topbar nav button svg {
     display: none;
-  }
-  .topbar nav button::before {
-    inset: 35% 0 -30%;
-    filter: blur(7px);
   }
   main {
     padding: 24px 18px 32px;
