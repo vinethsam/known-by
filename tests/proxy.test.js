@@ -57,12 +57,19 @@ describe("KnownBy development proxy guard", () => {
       request("/v1/jobs/job-1/results", "GET"),
       request("/v1/jobs/job-1/export?format=csv", "GET"),
       request("/v1/jobs/job-1/cancel", "POST"),
+      request("/v1/jobs/job-1/library", "POST"),
+      request("/v1/library/files?limit=50&offset=0", "GET"),
+      request("/v1/library/files/file-1", "GET"),
+      request("/api/v1/library/files/file-1", "DELETE"),
     ];
     const blocked = [
       request("/v1/research/person", "GET"),
       request("/v1/jobs/job-1/cancel", "GET"),
       request("/v1/admin", "POST"),
       request("/v1/jobs/job-1/unknown", "GET"),
+      request("/v1/jobs/job-1/library", "GET"),
+      request("/v1/library/files", "POST"),
+      request("/v1/library/files/file-1", "POST"),
     ];
 
     assert.equal(allowed.every(isAllowedProxyRoute), true);

@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   formatScoringValue,
   getJobProgress,
+  getJobProgressSummary,
+  getSavedBy,
 } from "../src/presentation.js";
 
 test("scoring diagnostics round only display values", () => {
@@ -49,4 +51,26 @@ test("failed and review-required people count as finished", () => {
   assert.equal(progress.finished, 3);
   assert.equal(progress.percentage, 100);
   assert.equal(progress.stage, "Research partially complete");
+});
+
+test("long-running batches show a human-readable current and total count", () => {
+  assert.equal(
+    getJobProgressSummary({
+      kind: "file",
+      status: "running",
+      totalPeople: 20,
+      counts: { completed: 11, review_required: 1, researching: 2 },
+    }),
+    "Researching people · 12 of 20 people finished · 2 in progress",
+  );
+  assert.equal(
+    getJobProgressSummary({ kind: "file", status: "queued", totalPeople: 20 }),
+    "Waiting for research to start · 0 of 20 people finished",
+  );
+});
+
+test("saved-by identity is shown only when the service provides it", () => {
+  assert.equal(getSavedBy({ saved_by: "  Jane Doe  " }), "Jane Doe");
+  assert.equal(getSavedBy({ added_by: "Alex" }), "Alex");
+  assert.equal(getSavedBy({ filename: "KnownBy.xlsx" }), "");
 });

@@ -33,6 +33,14 @@ exports are downloaded from the backend.
 
 History is kept for the current browser session only.
 
+## Shared Library
+
+Completed research can be saved explicitly as CSV or XLSX from the Research
+page. The Database tab shows the team's shared saved files, with download and
+confirmed delete actions. File names and saved dates come from the backend;
+the page shows a saver name only if the backend supplies one. Library requests
+use the same authenticated `/api/*` proxy as research requests.
+
 ## Validation
 
 Run:
@@ -43,5 +51,5 @@ npm run build
 ```
 
 The API tests cover relative proxy paths, person JSON, multipart uploads,
-status/results/cancel requests, readable backend errors, and binary export
-filenames.
+status/results/cancel requests, Shared Library actions, readable backend
+errors, and binary export filenames.

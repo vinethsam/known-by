@@ -15,6 +15,8 @@ const PERSON_STATUSES = new Set([
   "review_required",
   "cancelled",
 ]);
+const EXPORT_FORMATS = new Set(["csv", "xlsx"]);
+const PROVENANCE_MODES = new Set(["none", "field"]);
 const JSON_HEADERS = {
   Accept: "application/json",
   "Content-Type": "application/json",
@@ -37,6 +39,16 @@ function pathForJob(jobId, suffix = "") {
     throw new ApiError("A job ID is required.", { code: "INVALID_JOB_ID" });
   }
   return `${API_ROOT}/jobs/${encodeURIComponent(value)}${suffix}`;
+}
+
+function pathForLibraryFile(fileId) {
+  const value = String(fileId ?? "").trim();
+  if (!value) {
+    throw new ApiError("A library file ID is required.", {
+      code: "INVALID_FILE_ID",
+    });
+  }
+  return `${API_ROOT}/library/files/${encodeURIComponent(value)}`;
 }
 
 function readableLocation(location) {
@@ -156,6 +168,31 @@ async function requestJson(path, init = {}) {
   }
 
   return parsed.payload;
+}
+
+async function requestNoContent(path, init = {}) {
+  const response = await fetchFromApi(path, init);
+  if (!response.ok) {
+    const parsed = await parseResponsePayload(response);
+    const fallback = parsed.malformed
+      ? `The research service returned an error (${response.status}).`
+      : response.statusText || "The research request failed.";
+    throw new ApiError(messageFromPayload(parsed.payload, fallback), {
+      status: response.status,
+      statusText: response.statusText,
+      code: errorCode(parsed.payload, response.status),
+      details: parsed.payload,
+    });
+  }
+
+  if (response.status !== 204) {
+    throw new ApiError("The research service returned an invalid response.", {
+      status: response.status,
+      statusText: response.statusText,
+      code: "MALFORMED_RESPONSE",
+      details: null,
+    });
+  }
 }
 
 function isRecord(value) {
@@ -287,6 +324,30 @@ function isJobResultsPayload(value) {
   );
 }
 
+function isSavedResultFile(value) {
+  return (
+    isRecord(value) &&
+    typeof value.file_id === "string" &&
+    value.file_id.trim().length > 0 &&
+    typeof value.filename === "string" &&
+    value.filename.trim().length > 0 &&
+    EXPORT_FORMATS.has(value.format) &&
+    typeof value.saved_at === "string" &&
+    value.saved_at.trim().length > 0 &&
+    typeof value.research_started_at === "string" &&
+    value.research_started_at.trim().length > 0 &&
+    Number.isInteger(value.size_bytes) &&
+    value.size_bytes >= 0 &&
+    (value.list_name === undefined ||
+      value.list_name === null ||
+      typeof value.list_name === "string")
+  );
+}
+
+function isSavedResultFileList(value) {
+  return Array.isArray(value) && value.every(isSavedResultFile);
+}
+
 async function validateResponse(promise, validator, responseName) {
   const payload = await promise;
   if (!validator(payload)) {
@@ -375,6 +436,68 @@ export function cancelJob(jobId, options = {}) {
   );
 }
 
+export function saveJobToLibrary(jobId, format = "xlsx", options = {}) {
+  const provenance = options.provenance ?? "none";
+  if (!EXPORT_FORMATS.has(format)) {
+    throw new ApiError("Library format must be csv or xlsx.", {
+      code: "INVALID_EXPORT_FORMAT",
+    });
+  }
+  if (!PROVENANCE_MODES.has(provenance)) {
+    throw new ApiError("Library provenance must be none or field.", {
+      code: "INVALID_PROVENANCE_MODE",
+    });
+  }
+
+  return validateResponse(
+    requestJson(pathForJob(jobId, "/library"), {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ format, provenance }),
+      signal: options.signal,
+    }),
+    isSavedResultFile,
+    "saved file",
+  );
+}
+
+export function listLibraryFiles(options = {}) {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new ApiError("Library page size must be between 1 and 100.", {
+      code: "INVALID_LIBRARY_LIMIT",
+    });
+  }
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new ApiError("Library page offset must be zero or greater.", {
+      code: "INVALID_LIBRARY_OFFSET",
+    });
+  }
+
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return validateResponse(
+    requestJson(`${API_ROOT}/library/files?${query}`, {
+      headers: { Accept: "application/json" },
+      signal: options.signal,
+    }),
+    isSavedResultFileList,
+    "library files",
+  );
+}
+
+export async function deleteLibraryFile(fileId, options = {}) {
+  await requestNoContent(pathForLibraryFile(fileId), {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+    signal: options.signal,
+  });
+  return true;
+}
+
 function unquoteFilename(value) {
   const trimmed = value.trim();
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
@@ -409,8 +532,8 @@ function filenameFromDisposition(disposition) {
   return regular ? unquoteFilename(regular[1]) : "";
 }
 
-function safeFilename(value, fallback) {
-  const filename = value
+function safeFilename(value, fallback, expectedFormat) {
+  const filename = String(value ?? "")
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .replace(/[\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/[\\/:*?"<>|]/g, "-")
@@ -418,11 +541,44 @@ function safeFilename(value, fallback) {
     .trim()
     .slice(0, 180)
     .replace(/[. ]+$/, "");
-  return filename || fallback;
+  if (!filename) return fallback;
+  if (expectedFormat && !filename.toLowerCase().endsWith(`.${expectedFormat}`)) {
+    return fallback;
+  }
+  return filename;
+}
+
+async function triggerBlobDownload(response, fallback, expectedFormat) {
+  let blob;
+  try {
+    blob = await response.blob();
+  } catch (error) {
+    throw requestFailure(error);
+  }
+
+  const filename = safeFilename(
+    filenameFromDisposition(response.headers.get("Content-Disposition")),
+    safeFilename(fallback, `KnownBy-export.${expectedFormat}`, expectedFormat),
+    expectedFormat,
+  );
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
+
+  return { blob, filename };
 }
 
 export async function downloadExport(jobId, format = "csv", options = {}) {
-  if (format !== "csv" && format !== "xlsx") {
+  if (!EXPORT_FORMATS.has(format)) {
     throw new ApiError("Export format must be csv or xlsx.", {
       code: "INVALID_EXPORT_FORMAT",
     });
@@ -452,30 +608,51 @@ export async function downloadExport(jobId, format = "csv", options = {}) {
     });
   }
 
-  let blob;
-  try {
-    blob = await response.blob();
-  } catch (error) {
-    throw requestFailure(error);
+  return triggerBlobDownload(response, `KnownBy-export.${format}`, format);
+}
+
+export async function downloadLibraryFile(file, options = {}) {
+  const metadata = isRecord(file) ? file : null;
+  if (metadata && !isSavedResultFile(metadata)) {
+    throw new ApiError("The saved file metadata is invalid.", {
+      code: "INVALID_LIBRARY_FILE",
+    });
   }
 
-  const fallback = `research-${String(jobId).trim()}.${format}`;
-  const filename = safeFilename(
-    filenameFromDisposition(response.headers.get("Content-Disposition")),
-    fallback,
+  const fileId = metadata?.file_id ?? file;
+  const format = metadata?.format ?? options.format ?? "xlsx";
+  if (!EXPORT_FORMATS.has(format)) {
+    throw new ApiError("Library format must be csv or xlsx.", {
+      code: "INVALID_EXPORT_FORMAT",
+    });
+  }
+
+  const response = await fetchFromApi(pathForLibraryFile(fileId), {
+    headers: {
+      Accept:
+        format === "csv"
+          ? "text/csv"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    },
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    const parsed = await parseResponsePayload(response);
+    const fallback = parsed.malformed
+      ? `The download failed (${response.status}).`
+      : response.statusText || "The download failed.";
+    throw new ApiError(messageFromPayload(parsed.payload, fallback), {
+      status: response.status,
+      statusText: response.statusText,
+      code: errorCode(parsed.payload, response.status),
+      details: parsed.payload,
+    });
+  }
+
+  return triggerBlobDownload(
+    response,
+    metadata?.filename ?? options.filename ?? `KnownBy-export.${format}`,
+    format,
   );
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = filename;
-  link.hidden = true;
-  document.body.append(link);
-  try {
-    link.click();
-  } finally {
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  }
-
-  return { blob, filename };
 }

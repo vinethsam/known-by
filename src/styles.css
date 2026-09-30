@@ -156,9 +156,9 @@ svg {
   position: absolute;
   left: var(--nav-notch-x, 0px);
   bottom: 0;
-  width: 22px;
-  height: 5px;
-  border-radius: 60% 60% 45% 45% / 100% 100% 80% 80%;
+  width: 30px;
+  height: 3px;
+  border-radius: 999px;
   background: var(--accent);
   box-shadow: inset 0 1px 0 #ffffff5c, 0 2px 6px #4457d966;
   pointer-events: none;
@@ -702,28 +702,28 @@ input:disabled {
   align-items: center;
   flex-shrink: 0;
 }
-.result-actions .add-database-action {
-  width: 43px;
-  min-width: 43px;
-  padding: 10px;
-  color: #aeb8da;
+.library-save-controls {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 8px;
 }
-.add-database-action[aria-disabled="true"] {
-  cursor: not-allowed;
+.library-save-controls select {
+  min-height: 43px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #adb9ff08;
+  color: #c6cde2;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
 }
-.add-database-action[aria-disabled="true"]:hover {
-  color: #c8d0ec;
-  background: #a5b2ff0e;
-  border-color: #adbcff3b;
+.library-save-controls select:hover:not(:disabled) {
+  border-color: #adbcff4f;
+  color: #e4e9ff;
 }
-.result-actions .add-database-action::after {
-  left: auto;
-  right: 0;
-  transform: translateY(-4px);
-}
-.result-actions .add-database-action:hover::after,
-.result-actions .add-database-action:focus-visible::after {
-  transform: translateY(0);
+.library-save-controls select:disabled {
+  opacity: 0.65;
 }
 .loading-status {
   display: inline-flex;
@@ -1172,6 +1172,11 @@ input:disabled {
   border-color: #cea94c38;
   background: #b48b3510;
   color: #dbc17e;
+}
+.inline-notice.success {
+  border-color: #69bf9038;
+  background: #4eae7912;
+  color: #a9dfbf;
 }
 .populated-summary {
   align-items: flex-start;
@@ -2072,6 +2077,8 @@ dialog::backdrop {
     padding: 24px 18px 32px;
   }
   .page-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
     margin-bottom: 23px;
   }
   h1 {
@@ -2161,8 +2168,14 @@ dialog::backdrop {
   .result-actions .secondary {
     flex: 1 1 auto;
   }
-  .result-actions .add-database-action {
-    flex: 0 0 43px;
+  .library-save-controls {
+    width: 100%;
+  }
+  .library-save-controls select {
+    flex: 0 0 90px;
+  }
+  .library-save-controls .save-library-action {
+    flex: 1 1 auto;
   }
   .result-tools {
     width: 100%;

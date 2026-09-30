@@ -58,3 +58,23 @@ export function getJobProgress(job) {
     percentage: total ? Math.round((finished / total) * 100) : 0,
   };
 }
+
+export function getJobProgressSummary(job) {
+  const progress = getJobProgress(job);
+  if (job?.kind !== "file" || progress.total <= 0) return progress.stage;
+
+  const count = `${progress.finished} of ${progress.total} people finished`;
+  const active = progress.researching > 0
+    ? ` · ${progress.researching} in progress`
+    : "";
+  return `${progress.stage} · ${count}${active}`;
+}
+
+export function getSavedBy(file) {
+  const value =
+    file?.saved_by ??
+    file?.added_by ??
+    file?.creator_name ??
+    file?.created_by;
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}

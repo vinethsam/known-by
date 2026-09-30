@@ -8,6 +8,10 @@ const API_ROUTES = [
   ["GET", /^\/v1\/jobs\/[^/]+$/],
   ["GET", /^\/v1\/jobs\/[^/]+\/(?:results|export)$/],
   ["POST", /^\/v1\/jobs\/[^/]+\/cancel$/],
+  ["POST", /^\/v1\/jobs\/[^/]+\/library$/],
+  ["GET", /^\/v1\/library\/files$/],
+  ["GET", /^\/v1\/library\/files\/[^/]+$/],
+  ["DELETE", /^\/v1\/library\/files\/[^/]+$/],
 ];
 
 function headerValue(request, name) {

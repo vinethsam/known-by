@@ -1,0 +1,328 @@
+.shared-library {
+  padding-right: 0;
+  padding-left: 0;
+  overflow: hidden;
+}
+
+.shared-library__heading {
+  margin: 0 30px;
+}
+
+.shared-library__heading > div {
+  min-width: 0;
+}
+
+.shared-library__heading p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.shared-library__notice {
+  margin-right: 30px;
+  margin-left: 30px;
+}
+
+.shared-library__state {
+  min-height: 285px;
+  padding: 52px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--quiet);
+}
+
+.shared-library__state > svg {
+  margin-bottom: 17px;
+  color: #929fca;
+}
+
+.shared-library__state h3 {
+  color: #c8cfe3;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.25px;
+}
+
+.shared-library__state p {
+  max-width: 440px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.shared-library__state .secondary {
+  margin-top: 22px;
+}
+
+.shared-library__table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-color: #525d80 #1f2334;
+  scrollbar-width: thin;
+}
+
+.shared-library__table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.shared-library__table th {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--border);
+  background: #899cff05;
+  color: #aeb8d1;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.shared-library__table th:first-child,
+.shared-library__table td:first-child {
+  padding-left: 30px;
+}
+
+.shared-library__table th:last-child,
+.shared-library__table td:last-child {
+  padding-right: 30px;
+}
+
+.shared-library__table td {
+  padding: 18px;
+  border-bottom: 1px solid #a4b5f212;
+  color: #b9c1d7;
+  font-size: 12px;
+  line-height: 1.55;
+  vertical-align: middle;
+}
+
+.shared-library__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.shared-library__table tbody tr:hover {
+  background: #a0b2ff08;
+}
+
+.shared-library__file-name {
+  min-width: 230px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #dce1f0;
+}
+
+.shared-library__file-name svg {
+  color: #9caae1;
+}
+
+.shared-library__file-name strong {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.shared-library__format {
+  display: inline-flex;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #a4b5f907;
+  color: #adb7d2;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+}
+
+.shared-library__actions-heading {
+  text-align: right !important;
+}
+
+.shared-library__actions-cell {
+  width: 1%;
+}
+
+.shared-library__actions,
+.shared-library__delete-confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.shared-library__delete-confirmation > span {
+  margin-right: 3px;
+  color: #d6dbea;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.shared-library__compact-button {
+  min-height: 35px;
+  padding: 8px 11px;
+  font-size: 11px;
+}
+
+.shared-library__danger-button {
+  border-color: #db747f3d;
+  background: #cb657113;
+  color: #f0a3aa;
+}
+
+.shared-library__danger-button:hover:not(:disabled) {
+  border-color: #e0838e61;
+  background: #cb657120;
+  color: #ffd3d7;
+}
+
+.shared-library__load-more {
+  display: flex;
+  justify-content: center;
+  padding: 20px 30px 2px;
+}
+
+.shared-library__load-more .secondary {
+  min-width: 120px;
+}
+
+@media (max-width: 1050px) {
+  .shared-library__compact-button {
+    min-height: 43px;
+  }
+
+  .shared-library__heading {
+    margin-right: 21px;
+    margin-left: 21px;
+  }
+
+  .shared-library__notice {
+    margin-right: 21px;
+    margin-left: 21px;
+  }
+
+  .shared-library__table-wrap {
+    padding: 0 21px 8px;
+    overflow: visible;
+  }
+
+  .shared-library__table {
+    min-width: 0;
+  }
+
+  .shared-library__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .shared-library__table,
+  .shared-library__table tbody,
+  .shared-library__table tr,
+  .shared-library__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .shared-library__table tr {
+    margin-top: 14px;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #a4b5f905;
+  }
+
+  .shared-library__table td,
+  .shared-library__table th:first-child,
+  .shared-library__table td:first-child,
+  .shared-library__table th:last-child,
+  .shared-library__table td:last-child {
+    padding: 7px 0;
+    border: 0;
+  }
+
+  .shared-library__table td:not(.shared-library__actions-cell) {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .shared-library__table td::before {
+    content: attr(data-label);
+    color: var(--quiet);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.8;
+    text-transform: uppercase;
+  }
+
+  .shared-library__file-name {
+    min-width: 0;
+    align-items: flex-start;
+  }
+
+  .shared-library__actions-cell {
+    margin-top: 8px;
+    padding-top: 13px !important;
+    border-top: 1px solid var(--border) !important;
+  }
+
+  .shared-library__actions-cell::before {
+    display: none;
+  }
+
+  .shared-library__actions,
+  .shared-library__delete-confirmation {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .shared-library__actions .secondary {
+    flex: 1 1 125px;
+  }
+
+  .shared-library__load-more {
+    padding-right: 0;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .shared-library__heading {
+    align-items: flex-start;
+  }
+
+  .shared-library__heading > span {
+    display: none;
+  }
+
+  .shared-library__table-wrap {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .shared-library__table tr {
+    padding: 14px;
+  }
+
+  .shared-library__delete-confirmation > span {
+    width: 100%;
+    margin: 0 0 3px;
+  }
+}

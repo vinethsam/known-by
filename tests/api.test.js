@@ -4,11 +4,15 @@ import { afterEach, describe, test } from "node:test";
 import {
   ApiError,
   cancelJob,
+  deleteLibraryFile,
   downloadExport,
+  downloadLibraryFile,
   getJob,
   getJobResults,
+  listLibraryFiles,
   researchBatch,
   researchPerson,
+  saveJobToLibrary,
 } from "../src/api.js";
 
 const originalFetch = globalThis.fetch;
@@ -52,6 +56,43 @@ const jobResults = {
   status: "completed",
   people: [],
 };
+
+const savedFile = {
+  file_id: "file/id",
+  filename: "Forbes-2000_2026-09-29_0241.csv",
+  format: "csv",
+  saved_at: "2026-09-29T02:42:00Z",
+  research_started_at: "2026-09-29T02:41:00Z",
+  size_bytes: 128,
+  list_name: "Forbes 2000",
+};
+
+function installDownloadHarness() {
+  let clicked = false;
+  let downloadedAs = "";
+  let revoked = "";
+  const link = {
+    hidden: false,
+    href: "",
+    download: "",
+    click() {
+      clicked = true;
+      downloadedAs = this.download;
+    },
+    remove() {},
+  };
+  globalThis.document = {
+    createElement: () => link,
+    body: { append() {} },
+  };
+  URL.createObjectURL = () => "blob:test-export";
+  URL.revokeObjectURL = (value) => {
+    revoked = value;
+  };
+  return {
+    state: () => ({ clicked, downloadedAs, revoked }),
+  };
+}
 
 describe("KnownBy browser API", { concurrency: false }, () => {
   test("uses the person contract and only the relative proxy URL", async () => {
@@ -118,6 +159,67 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       ],
     );
     assert.equal(requests[2].init.method, "POST");
+  });
+
+  test("saves completed exports with the library request contract", async () => {
+    const signal = new AbortController().signal;
+    let request;
+    globalThis.fetch = async (url, init) => {
+      request = { url, init };
+      return jsonResponse(savedFile, { status: 201 });
+    };
+
+    const result = await saveJobToLibrary("job/id", "csv", { signal });
+
+    assert.equal(request.url, "/api/v1/jobs/job%2Fid/library");
+    assert.equal(request.init.method, "POST");
+    assert.equal(request.init.signal, signal);
+    assert.deepEqual(JSON.parse(request.init.body), {
+      format: "csv",
+      provenance: "none",
+    });
+    assert.equal(result.filename, savedFile.filename);
+    assert.equal(new Headers(request.init.headers).has("Authorization"), false);
+  });
+
+  test("lists validated library metadata with bounded pagination", async () => {
+    const signal = new AbortController().signal;
+    let request;
+    globalThis.fetch = async (url, init) => {
+      request = { url, init };
+      return jsonResponse([savedFile]);
+    };
+
+    const result = await listLibraryFiles({ limit: 25, offset: 50, signal });
+
+    assert.equal(request.url, "/api/v1/library/files?limit=25&offset=50");
+    assert.equal(request.init.signal, signal);
+    assert.deepEqual(result, [savedFile]);
+
+    globalThis.fetch = async () => {
+      const { list_name: _omitted, ...withoutOptionalName } = savedFile;
+      return jsonResponse([withoutOptionalName]);
+    };
+    assert.equal((await listLibraryFiles({ signal }))[0].list_name, undefined);
+
+    globalThis.fetch = async () => jsonResponse([{ ...savedFile, size_bytes: "128" }]);
+    await assert.rejects(listLibraryFiles({ signal }), {
+      name: "ApiError",
+      code: "MALFORMED_RESPONSE",
+      message: "The research service returned an invalid library files response.",
+    });
+  });
+
+  test("deletes library files through the encoded file route", async () => {
+    let request;
+    globalThis.fetch = async (url, init) => {
+      request = { url, init };
+      return new Response(null, { status: 204 });
+    };
+
+    assert.equal(await deleteLibraryFile("file/id"), true);
+    assert.equal(request.url, "/api/v1/library/files/file%2Fid");
+    assert.equal(request.init.method, "DELETE");
   });
 
   test("formats FastAPI validation errors without exposing request data", async () => {
@@ -203,36 +305,53 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       });
     };
 
-    let clicked = false;
-    let downloadedAs = "";
-    let revoked = "";
-    const link = {
-      hidden: false,
-      href: "",
-      download: "",
-      click() {
-        clicked = true;
-        downloadedAs = this.download;
-      },
-      remove() {},
-    };
-    globalThis.document = {
-      createElement: () => link,
-      body: { append() {} },
-    };
-    URL.createObjectURL = () => "blob:test-export";
-    URL.revokeObjectURL = (value) => {
-      revoked = value;
-    };
+    const download = installDownloadHarness();
 
     const result = await downloadExport("job-1", "csv");
     await new Promise((resolve) => setTimeout(resolve, 0));
+    const state = download.state();
 
     assert.equal(requestUrl, "/api/v1/jobs/job-1/export?format=csv");
-    assert.equal(clicked, true);
-    assert.equal(downloadedAs, "research results.csv");
-    assert.equal(revoked, "blob:test-export");
+    assert.equal(state.clicked, true);
+    assert.equal(state.downloadedAs, "research results.csv");
+    assert.equal(state.revoked, "blob:test-export");
     assert.equal(result.filename, "research results.csv");
     assert.ok(result.blob instanceof Blob);
+  });
+
+  test("downloads saved files and falls back to metadata without exposing IDs", async () => {
+    let requestUrl;
+    globalThis.fetch = async (url) => {
+      requestUrl = url;
+      return new Response(new Blob(["full_name\nAda Lovelace\n"]), {
+        status: 200,
+        headers: { "Content-Type": "text/csv" },
+      });
+    };
+    const download = installDownloadHarness();
+
+    const result = await downloadLibraryFile(savedFile);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const state = download.state();
+
+    assert.equal(requestUrl, "/api/v1/library/files/file%2Fid");
+    assert.equal(state.downloadedAs, savedFile.filename);
+    assert.equal(result.filename, savedFile.filename);
+    assert.equal(result.filename.includes(savedFile.file_id), false);
+  });
+
+  test("normal export fallback filenames never reveal the job ID", async () => {
+    globalThis.fetch = async () =>
+      new Response(new Blob(["full_name\nAda Lovelace\n"]), {
+        status: 200,
+        headers: { "Content-Type": "text/csv" },
+      });
+    const download = installDownloadHarness();
+
+    const result = await downloadExport("secret-job-id", "csv");
+
+    assert.equal(download.state().downloadedAs, "KnownBy-export.csv");
+    assert.equal(result.filename, "KnownBy-export.csv");
+    assert.equal(result.filename.includes("secret-job-id"), false);
   });
 });

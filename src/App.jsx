@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
-  Database,
   ExternalLink,
   FileSpreadsheet,
   FileUp,
@@ -24,10 +23,13 @@ import {
   getJobResults,
   researchBatch,
   researchPerson,
+  saveJobToLibrary,
 } from "./api.js";
 import { fields } from "./data.js";
-import { formatScoringValue, getJobProgress } from "./presentation.js";
+import { formatScoringValue, getJobProgress, getJobProgressSummary } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
+import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
+import SharedLibrary from "./SharedLibrary.jsx";
 import { useGlassSurface } from "./glass/useGlassSurface.js";
 
 const brand = { name: "KnownBy" };
@@ -798,12 +800,14 @@ function Results({
   job,
   onCancel,
   onExport,
+  onSave,
   onResume,
   resumeDisabled,
   onRetryResults,
   onSelect,
   regionRef,
 }) {
+  const [libraryFormat, setLibraryFormat] = useState("xlsx");
   useGlassSurface(regionRef, {
     enabled: job?.kind !== "file",
     refreshKey: `${job?.id ?? "idle"}:${Boolean(job?.results)}`,
@@ -826,6 +830,7 @@ function Results({
   const person = job?.results?.people?.[0];
   const hasResults = Boolean(job?.results);
   const progress = job ? getJobProgress(job) : null;
+  const alreadySaved = Boolean(job?.savedFormats?.includes(libraryFormat));
 
   return (
     <section
@@ -883,26 +888,35 @@ function Results({
               >
                 <ArrowDownToLine size={16} /> XLSX
               </button>
-              {hasResults && ["completed", "partial"].includes(job.status) && (
-                <button
-                  type="button"
-                  className="secondary add-database-action tooltip-trigger"
-                  aria-label="Add to Database"
-                  aria-describedby="database-action-unavailable"
-                  aria-disabled="true"
-                  data-tooltip="Add to Database"
-                >
-                  <Database size={17} />
-                </button>
+              {job.status === "completed" && (
+                <div className="library-save-controls">
+                  <label className="sr-only" htmlFor="library-save-format">
+                    Library file type
+                  </label>
+                  <select
+                    id="library-save-format"
+                    value={libraryFormat}
+                    disabled={Boolean(job.saving)}
+                    onChange={(event) => setLibraryFormat(event.target.value)}
+                  >
+                    <option value="xlsx">XLSX</option>
+                    <option value="csv">CSV</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="secondary save-library-action"
+                    disabled={Boolean(job.saving) || alreadySaved}
+                    onClick={() => onSave(job, libraryFormat)}
+                  >
+                    <DatabaseStackIcon size={17} />
+                    {job.saving ? "Saving…" : alreadySaved ? "Saved to Library" : "Save to Library"}
+                  </button>
+                </div>
               )}
             </>
           )}
         </div>
       </div>
-      <span id="database-action-unavailable" className="sr-only">
-        Database saving is not available yet.
-      </span>
-
       {!job ? (
         <div className="idle-results">
           <span className="idle-icon"><Search size={27} /></span>
@@ -952,10 +966,22 @@ function Results({
               <span>{job.exportError}</span>
             </div>
           )}
+          {job.saveError && (
+            <div className="inline-notice error" role="alert">
+              <AlertCircle size={17} />
+              <span>{job.saveError}</span>
+            </div>
+          )}
+          {job.savedFile && (
+            <div className="inline-notice success" role="status">
+              <CheckCircle2 size={17} />
+              <span>Saved to Shared Library: {job.savedFile}</span>
+            </div>
+          )}
 
           {isActive && (
             <p className="loading-status results-loading-note" role="status">
-              <i /> {progress.stage}
+              <i /> {job.kind === "file" ? getJobProgressSummary(job) : progress.stage}
             </p>
           )}
 
@@ -1302,6 +1328,24 @@ export default function App() {
     }
   }
 
+  async function handleSaveToLibrary(job, format) {
+    if (!job.jobId || job.status !== "completed" || job.saving || job.savedFormats?.includes(format)) return;
+    updateJob(job.id, { saving: true, saveError: null, savedFile: null });
+    try {
+      const saved = await saveJobToLibrary(job.jobId, format);
+      updateJob(job.id, (current) => ({
+        saving: false,
+        savedFile: saved.filename,
+        savedFormats: [...new Set([...(current.savedFormats ?? []), format])],
+      }));
+    } catch (error) {
+      updateJob(job.id, {
+        saving: false,
+        saveError: errorMessage(error, "The result could not be saved to Shared Library."),
+      });
+    }
+  }
+
   return (
     <>
       <AnimatedBackground />
@@ -1338,7 +1382,7 @@ export default function App() {
                 ) : item === "History" ? (
                   <Clock3 size={17} />
                 ) : (
-                  <Database size={17} />
+                  <DatabaseStackIcon size={17} />
                 )}
                 {item}
               </button>
@@ -1361,7 +1405,7 @@ export default function App() {
                 ? "Research a person or enrich a file."
                 : nav === "History"
                   ? "Review research from this session."
-                  : "Database tools will appear here."}
+                  : "Browse results saved to the Shared Library."}
             </p>
           </div>
           {busy && (
@@ -1448,6 +1492,7 @@ export default function App() {
               job={activeJob}
               onCancel={handleCancel}
               onExport={handleExport}
+              onSave={handleSaveToLibrary}
               onResume={resumeMonitoring}
               resumeDisabled={busy}
               onRetryResults={(job) => loadResults(job)}
@@ -1513,15 +1558,9 @@ export default function App() {
             )}
           </section>
         ) : (
-          <section ref={pageGlass} className="history-panel database-panel" aria-labelledby="database-title">
-            <div className="history-heading">
-              <h2 id="database-title">Database</h2>
-            </div>
-            <div className="empty-state">
-              <Database size={30} />
-              <h3>Database tools will appear here</h3>
-            </div>
-          </section>
+          <div ref={pageGlass}>
+            <SharedLibrary />
+          </div>
         )}
       </main>
 
