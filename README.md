@@ -35,11 +35,26 @@ History is kept for the current browser session only.
 
 ## Shared Library
 
-Completed research can be saved explicitly as CSV or XLSX from the Research
-page. The Database tab shows the team's shared saved files, with download and
+Completed research can be saved with **Add to Database** beside the CSV and
+XLSX export buttons. It retains an XLSX copy through the existing library API,
+shows a confirmation with a shortcut to Database, and prevents repeated saves
+for the same job in the current session. Deleting that saved entry enables
+adding it again. The Database tab shows the team's shared saved files, with download and
 confirmed delete actions. File names and saved dates come from the backend;
 the page shows a saver name only if the backend supplies one. Library requests
 use the same authenticated `/api/*` proxy as research requests.
+
+## Startup and account UI
+
+The app opens with a brief Thinking Orbs startup card over the existing
+gradient, then fades into the interface. It never waits on the research
+service. Reduced motion uses a paused orb and a shorter transition. Thinking
+Orbs is used only at startup; research keeps its existing skeleton loader.
+
+The header account button opens the signed-out account dialog. Google sign-in
+is visibly unavailable until a real authentication backend is connected.
+There are no simulated sessions, user profiles, or OAuth requests. The dialog
+is isolated in `src/account/AccountDialog.jsx` for future integration.
 
 ## Validation
 

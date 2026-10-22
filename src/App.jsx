@@ -12,7 +12,6 @@ import {
   Layers3,
   RefreshCw,
   Search,
-  ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
@@ -30,6 +29,8 @@ import { formatScoringValue, getJobProgress, getJobProgressSummary } from "./pre
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import SharedLibrary from "./SharedLibrary.jsx";
+import AccountDialog from "./account/AccountDialog.jsx";
+import StartupSequence from "./startup/StartupSequence.jsx";
 import { useGlassSurface } from "./glass/useGlassSurface.js";
 
 const brand = { name: "KnownBy" };
@@ -807,7 +808,6 @@ function Results({
   onSelect,
   regionRef,
 }) {
-  const [libraryFormat, setLibraryFormat] = useState("xlsx");
   useGlassSurface(regionRef, {
     enabled: job?.kind !== "file",
     refreshKey: `${job?.id ?? "idle"}:${Boolean(job?.results)}`,
@@ -830,7 +830,7 @@ function Results({
   const person = job?.results?.people?.[0];
   const hasResults = Boolean(job?.results);
   const progress = job ? getJobProgress(job) : null;
-  const alreadySaved = Boolean(job?.savedFormats?.includes(libraryFormat));
+  const alreadySaved = Boolean(job?.savedEntry);
 
   return (
     <section
@@ -889,29 +889,15 @@ function Results({
                 <ArrowDownToLine size={16} /> XLSX
               </button>
               {job.status === "completed" && (
-                <div className="library-save-controls">
-                  <label className="sr-only" htmlFor="library-save-format">
-                    Library file type
-                  </label>
-                  <select
-                    id="library-save-format"
-                    value={libraryFormat}
-                    disabled={Boolean(job.saving)}
-                    onChange={(event) => setLibraryFormat(event.target.value)}
-                  >
-                    <option value="xlsx">XLSX</option>
-                    <option value="csv">CSV</option>
-                  </select>
-                  <button
-                    type="button"
-                    className="secondary save-library-action"
-                    disabled={Boolean(job.saving) || alreadySaved}
-                    onClick={() => onSave(job, libraryFormat)}
-                  >
-                    <DatabaseStackIcon size={17} />
-                    {job.saving ? "Saving…" : alreadySaved ? "Saved to Library" : "Save to Library"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="secondary add-database-action"
+                  disabled={Boolean(job.saving) || alreadySaved}
+                  onClick={() => onSave(job)}
+                >
+                  {alreadySaved ? <CheckCircle2 size={17} /> : <DatabaseStackIcon size={17} />}
+                  {job.saving ? "Adding…" : alreadySaved ? "Added to Database" : "Add to Database"}
+                </button>
               )}
             </>
           )}
@@ -972,13 +958,6 @@ function Results({
               <span>{job.saveError}</span>
             </div>
           )}
-          {job.savedFile && (
-            <div className="inline-notice success" role="status">
-              <CheckCircle2 size={17} />
-              <span>Saved to Shared Library: {job.savedFile}</span>
-            </div>
-          )}
-
           {isActive && (
             <p className="loading-status results-loading-note" role="status">
               <i /> {job.kind === "file" ? getJobProgressSummary(job) : progress.stage}
@@ -1031,6 +1010,11 @@ function Results({
 }
 
 export default function App() {
+  const [starting, setStarting] = useState(true);
+  const [interfaceRevealed, setInterfaceRevealed] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [saveNotice, setSaveNotice] = useState(null);
+  const [libraryRevision, setLibraryRevision] = useState(0);
   const [nav, setNav] = useState(sectionFromHash);
   const [name, setName] = useState("");
   const [organisation, setOrganisation] = useState("");
@@ -1046,6 +1030,8 @@ export default function App() {
   const navRef = useRef(null);
   const personGlass = useRef(null);
   const pageGlass = useRef(null);
+  const pendingSaves = useRef(new Set());
+  const savedEntries = useRef(new Map());
 
   useGlassSurface(headerGlass, { surfaceOpacity: 0.29, tintOpacity: 0.2 });
   useGlassSurface(personGlass, { surfaceOpacity: 0.32 });
@@ -1328,27 +1314,54 @@ export default function App() {
     }
   }
 
-  async function handleSaveToLibrary(job, format) {
-    if (!job.jobId || job.status !== "completed" || job.saving || job.savedFormats?.includes(format)) return;
-    updateJob(job.id, { saving: true, saveError: null, savedFile: null });
+  async function handleAddToDatabase(job) {
+    if (
+      !job.jobId || job.status !== "completed" ||
+      pendingSaves.current.has(job.jobId) || savedEntries.current.has(job.jobId)
+    ) return;
+
+    pendingSaves.current.add(job.jobId);
+    updateJob(job.id, { saving: true, saveError: null });
     try {
-      const saved = await saveJobToLibrary(job.jobId, format);
-      updateJob(job.id, (current) => ({
-        saving: false,
-        savedFile: saved.filename,
-        savedFormats: [...new Set([...(current.savedFormats ?? []), format])],
-      }));
+      const saved = await saveJobToLibrary(job.jobId, "xlsx");
+      savedEntries.current.set(job.jobId, saved);
+      updateJob(job.id, { saving: false, savedEntry: saved });
+      setLibraryRevision((value) => value + 1);
+      setSaveNotice(saved);
     } catch (error) {
       updateJob(job.id, {
         saving: false,
-        saveError: errorMessage(error, "The result could not be saved to Shared Library."),
+        saveError: errorMessage(error, "The result could not be added to Database. Please try again."),
       });
+    } finally {
+      pendingSaves.current.delete(job.jobId);
     }
+  }
+
+  function handleLibraryDelete(fileId) {
+    for (const [jobId, saved] of savedEntries.current) {
+      if (saved.file_id === fileId) savedEntries.current.delete(jobId);
+    }
+    setJobs((items) => items.map((job) => job.savedEntry?.file_id === fileId
+      ? { ...job, savedEntry: null }
+      : job));
+    setSaveNotice((notice) => notice?.file_id === fileId ? null : notice);
   }
 
   return (
     <>
       <AnimatedBackground />
+      {starting && (
+        <StartupSequence
+          onReveal={() => setInterfaceRevealed(true)}
+          onComplete={() => setStarting(false)}
+        />
+      )}
+      <div
+        className={`app-interface${interfaceRevealed ? "" : " app-interface--starting"}`}
+        inert={starting || undefined}
+        aria-hidden={starting || undefined}
+      >
       <header ref={headerGlass} className="topbar">
         <div className="header-inner">
           <a
@@ -1389,9 +1402,17 @@ export default function App() {
             ))}
           </nav>
           <div className="header-right">
-            <span className="workspace-label">
-              <ShieldCheck size={15} /> Internal workspace
-            </span>
+            <button
+              type="button"
+              className="account-control"
+              aria-label="Open account"
+              aria-haspopup="dialog"
+              aria-expanded={accountOpen}
+              title="Account"
+              onClick={() => setAccountOpen(true)}
+            >
+              <UserRound size={20} />
+            </button>
           </div>
         </div>
       </header>
@@ -1492,7 +1513,7 @@ export default function App() {
               job={activeJob}
               onCancel={handleCancel}
               onExport={handleExport}
-              onSave={handleSaveToLibrary}
+              onSave={handleAddToDatabase}
               onResume={resumeMonitoring}
               resumeDisabled={busy}
               onRetryResults={(job) => loadResults(job)}
@@ -1559,7 +1580,7 @@ export default function App() {
           </section>
         ) : (
           <div ref={pageGlass}>
-            <SharedLibrary />
+            <SharedLibrary onDelete={handleLibraryDelete} refreshToken={libraryRevision} />
           </div>
         )}
       </main>
@@ -1571,6 +1592,33 @@ export default function App() {
           onClose={() => setSelection(null)}
         />
       )}
+      {saveNotice && (
+        <aside className="database-toast" aria-label="Database confirmation">
+          <CheckCircle2 size={21} className="database-toast-icon" />
+          <div className="database-toast-copy">
+            <div role="status">
+              <strong>Added to Database</strong>
+              <span>{saveNotice.filename}</span>
+            </div>
+            <button type="button" className="text-button" onClick={() => {
+              navigateTo("Database");
+              setSaveNotice(null);
+            }}>
+              View Database <ArrowRight size={14} />
+            </button>
+          </div>
+          <button
+            type="button"
+            className="toast-close"
+            aria-label="Dismiss save confirmation"
+            onClick={() => setSaveNotice(null)}
+          >
+            <X size={16} />
+          </button>
+        </aside>
+      )}
+      {accountOpen && <AccountDialog onClose={() => setAccountOpen(false)} />}
+      </div>
     </>
   );
 }

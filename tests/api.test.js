@@ -210,6 +210,23 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     });
   });
 
+  test("Add to Database defaults to XLSX and reports a rejected save", async () => {
+    let request;
+    globalThis.fetch = async (url, init) => {
+      request = { url, init };
+      return jsonResponse({ ...savedFile, format: "xlsx", filename: "KnownBy_2026-10-22_1200.xlsx" }, { status: 201 });
+    };
+    const saved = await saveJobToLibrary("completed-job");
+    assert.deepEqual(JSON.parse(request.init.body), { format: "xlsx", provenance: "none" });
+    assert.equal(saved.format, "xlsx");
+
+    globalThis.fetch = async () => jsonResponse({ detail: "Only completed jobs can be saved" }, { status: 409 });
+    await assert.rejects(saveJobToLibrary("unfinished-job"), {
+      status: 409,
+      message: "Only completed jobs can be saved",
+    });
+  });
+
   test("deletes library files through the encoded file route", async () => {
     let request;
     globalThis.fetch = async (url, init) => {

@@ -1,0 +1,212 @@
+.account-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  color: var(--text);
+  background: #252a3ee8;
+  box-shadow: 0 24px 80px #090e2280, inset 0 1px 0 #e5eaff14;
+  overflow-y: auto;
+  animation: account-enter 200ms ease-out both;
+}
+
+.account-dialog::backdrop {
+  background: #0a102299;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: account-backdrop-enter 200ms ease-out both;
+}
+
+.account-dialog[data-closing] {
+  animation: account-exit 160ms ease-in both;
+}
+
+.account-dialog[data-closing]::backdrop {
+  animation: account-backdrop-exit 160ms ease-in both;
+}
+
+.account-dialog-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 31px;
+}
+
+.account-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-right: -7px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.account-close:hover {
+  border-color: var(--border-strong);
+  background: #aab7ff0e;
+  color: var(--text);
+}
+
+.account-close:active,
+.account-continue:active {
+  transform: translateY(1px);
+}
+
+.account-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 13px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #aab7ff08;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.account-dialog h2 {
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.65px;
+  line-height: 1.4;
+}
+
+.account-description {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.account-provider {
+  margin-top: 27px;
+}
+
+.account-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: #aab7ff0c;
+  color: var(--muted);
+  box-shadow: inset 0 1px 0 #e5eaff08;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-availability {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 11px;
+  color: var(--quiet);
+  font-size: 10px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.account-dialog-footer {
+  margin-top: 27px;
+  padding-top: 21px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.account-dialog-footer p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.75;
+}
+
+.account-continue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  margin-top: 10px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-continue:hover {
+  border-color: var(--border);
+  background: #aab7ff0b;
+  color: var(--text);
+}
+
+@keyframes account-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes account-exit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(4px); }
+}
+
+@keyframes account-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes account-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (max-width: 480px) {
+  .account-dialog {
+    padding: 24px;
+  }
+
+  .account-dialog-top {
+    margin-bottom: 25px;
+  }
+
+  .account-dialog h2 {
+    font-size: 21px;
+  }
+
+  .account-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .account-continue {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-dialog,
+  .account-dialog::backdrop {
+    animation: none !important;
+  }
+
+  .account-dialog button {
+    transition: none;
+  }
+}

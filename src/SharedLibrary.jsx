@@ -43,7 +43,7 @@ function libraryError(error, fallback) {
     : fallback;
 }
 
-export default function SharedLibrary() {
+export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -77,6 +77,7 @@ export default function SharedLibrary() {
 
     listLibraryFiles({ limit: PAGE_SIZE, offset: 0, signal: controller.signal })
       .then((items) => {
+        if (controller.signal.aborted) return;
         setFiles(items);
         setHasMore(items.length === PAGE_SIZE);
         setActionError("");
@@ -90,7 +91,7 @@ export default function SharedLibrary() {
       });
 
     return () => controller.abort();
-  }, [reloadToken]);
+  }, [reloadToken, refreshToken]);
 
   useEffect(
     () => () => {
@@ -169,6 +170,7 @@ export default function SharedLibrary() {
       );
       setDeleteCandidate("");
       setAnnouncement(`Deleted ${file.filename} from Shared Library.`);
+      onDelete?.(file.file_id);
     } catch (error) {
       setActionError(
         libraryError(error, `Unable to delete ${file.filename}.`),

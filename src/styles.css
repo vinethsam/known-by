@@ -51,6 +51,15 @@ body {
   isolation: isolate;
   min-height: 100dvh;
 }
+.app-interface {
+  position: relative;
+  z-index: 1;
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+.app-interface--starting {
+  opacity: 0;
+}
 button,
 input,
 select {
@@ -199,14 +208,27 @@ svg {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 20px;
+  flex-shrink: 0;
 }
-.workspace-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
+.account-control {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: #aab7ff08;
+  color: #bbc4df;
+  box-shadow: inset 0 1px 0 #e5eaff0c;
+}
+.account-control:hover,
+.account-control[aria-expanded="true"] {
+  background: #a5b2ff17;
+  border-color: #adbcff4f;
+  color: var(--text);
+}
+.account-control:active {
+  transform: translateY(1px);
 }
 .workspace-status {
   display: inline-flex;
@@ -702,29 +724,6 @@ input:disabled {
   align-items: center;
   flex-shrink: 0;
 }
-.library-save-controls {
-  display: inline-flex;
-  align-items: stretch;
-  gap: 8px;
-}
-.library-save-controls select {
-  min-height: 43px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: #adb9ff08;
-  color: #c6cde2;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.library-save-controls select:hover:not(:disabled) {
-  border-color: #adbcff4f;
-  color: #e4e9ff;
-}
-.library-save-controls select:disabled {
-  opacity: 0.65;
-}
 .loading-status {
   display: inline-flex;
   align-items: center;
@@ -1177,6 +1176,69 @@ input:disabled {
   border-color: #69bf9038;
   background: #4eae7912;
   color: #a9dfbf;
+}
+.database-toast {
+  position: fixed;
+  z-index: 30;
+  right: 24px;
+  bottom: 24px;
+  width: min(420px, calc(100vw - 36px));
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: #24283bf0;
+  box-shadow: 0 16px 44px #090e2273, inset 0 1px 0 #e5eaff17;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: save-confirmation-enter 180ms ease-out;
+}
+.database-toast-icon {
+  color: #91d5b0;
+  margin-top: 2px;
+}
+.database-toast-copy {
+  min-width: 0;
+  flex: 1;
+}
+.database-toast-copy strong,
+.database-toast-copy span {
+  display: block;
+}
+.database-toast-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+.database-toast-copy span {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.database-toast-copy .text-button {
+  margin-top: 9px;
+  min-height: 30px;
+}
+.toast-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--quiet);
+}
+.toast-close:hover {
+  color: var(--text);
+  background: #aab7ff10;
+}
+@keyframes save-confirmation-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .populated-summary {
   align-items: flex-start;
@@ -1990,9 +2052,6 @@ dialog::backdrop {
     text-align: center;
     gap: 10px;
   }
-  .workspace-label {
-    display: none;
-  }
 }
 @media (max-width: 900px) {
   .header-inner {
@@ -2017,9 +2076,6 @@ dialog::backdrop {
   .drop-zone {
     flex-direction: row;
     text-align: left;
-  }
-  .header-right {
-    display: none;
   }
   .results-heading {
     padding: 23px 25px;
@@ -2168,14 +2224,13 @@ dialog::backdrop {
   .result-actions .secondary {
     flex: 1 1 auto;
   }
-  .library-save-controls {
-    width: 100%;
+  .database-toast {
+    right: 18px;
+    bottom: 18px;
   }
-  .library-save-controls select {
-    flex: 0 0 90px;
-  }
-  .library-save-controls .save-library-action {
-    flex: 1 1 auto;
+  .toast-close {
+    width: 36px;
+    height: 36px;
   }
   .result-tools {
     width: 100%;
@@ -2283,7 +2338,7 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 380px) {
+@media (max-width: 480px) {
   .topbar {
     height: auto;
     min-height: 108px;
@@ -2295,6 +2350,7 @@ dialog::backdrop {
     flex-wrap: wrap;
   }
   .topbar nav {
+    order: 2;
     width: 100%;
     margin-left: 0;
     height: 39px;
@@ -2306,6 +2362,8 @@ dialog::backdrop {
   .topbar nav button svg {
     display: none;
   }
+}
+@media (max-width: 380px) {
   .workflow-card {
     padding: 23px 18px;
   }
