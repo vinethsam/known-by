@@ -74,6 +74,7 @@ export default function StartupSequence({ onReveal, onComplete }) {
                 state="composing"
                 size={20}
                 theme="dark"
+                color="#a2adff"
                 paused={reducedMotion || leaving}
                 aria-hidden="true"
               />

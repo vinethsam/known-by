@@ -724,6 +724,26 @@ input:disabled {
   align-items: center;
   flex-shrink: 0;
 }
+.library-save-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+.library-save-controls select {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--input);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.library-save-controls select:hover:not(:disabled) {
+  border-color: #a5b5fb43;
+  color: var(--text);
+}
 .loading-status {
   display: inline-flex;
   align-items: center;
@@ -2223,6 +2243,9 @@ dialog::backdrop {
   .result-actions .primary,
   .result-actions .secondary {
     flex: 1 1 auto;
+  }
+  .library-save-controls {
+    flex: 1 1 100%;
   }
   .database-toast {
     right: 18px;

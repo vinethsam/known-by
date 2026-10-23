@@ -210,7 +210,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     });
   });
 
-  test("Add to Database defaults to XLSX and reports a rejected save", async () => {
+  test("Save to Library defaults to XLSX and reports a rejected save", async () => {
     let request;
     globalThis.fetch = async (url, init) => {
       request = { url, init };
@@ -225,6 +225,31 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       status: 409,
       message: "Only completed jobs can be saved",
     });
+  });
+
+  test("library requests retain server creator metadata and use the existing authenticated transport", async () => {
+    const files = [
+      { ...savedFile, file_id: "first", creator: { display_name: "First Test Saver", email: "first@example.test" } },
+      { ...savedFile, file_id: "second", saved_by: { display_name: "Second Test Saver" } },
+    ];
+    const requests = [];
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, init });
+      return jsonResponse(init.method === "POST" ? files[0] : files);
+    };
+    assert.deepEqual(await listLibraryFiles(), files);
+    assert.deepEqual(await saveJobToLibrary("test-job", "csv"), files[0]);
+    for (const { init } of requests) {
+      assert.equal(init.credentials, "same-origin");
+      assert.equal(init.cache, "no-store");
+      assert.equal(new Headers(init.headers).has("Authorization"), false);
+    }
+
+    globalThis.fetch = async () => jsonResponse({ detail: "Unauthorized" }, { status: 401 });
+    await assert.rejects(listLibraryFiles(), { status: 401 });
+    await assert.rejects(saveJobToLibrary("test-job", "xlsx"), { status: 401 });
+    await assert.rejects(downloadLibraryFile(savedFile), { status: 401 });
+    await assert.rejects(deleteLibraryFile(savedFile.file_id), { status: 401 });
   });
 
   test("deletes library files through the encoded file route", async () => {

@@ -25,7 +25,7 @@ import {
   saveJobToLibrary,
 } from "./api.js";
 import { fields } from "./data.js";
-import { formatScoringValue, getJobProgress, getJobProgressSummary } from "./presentation.js";
+import { formatLibraryError, formatScoringValue, getJobProgress, getJobProgressSummary } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import SharedLibrary from "./SharedLibrary.jsx";
@@ -808,6 +808,7 @@ function Results({
   onSelect,
   regionRef,
 }) {
+  const [libraryFormat, setLibraryFormat] = useState("xlsx");
   useGlassSurface(regionRef, {
     enabled: job?.kind !== "file",
     refreshKey: `${job?.id ?? "idle"}:${Boolean(job?.results)}`,
@@ -830,7 +831,7 @@ function Results({
   const person = job?.results?.people?.[0];
   const hasResults = Boolean(job?.results);
   const progress = job ? getJobProgress(job) : null;
-  const alreadySaved = Boolean(job?.savedEntry);
+  const alreadySaved = Boolean(job?.savedEntries?.[libraryFormat]);
 
   return (
     <section
@@ -889,15 +890,27 @@ function Results({
                 <ArrowDownToLine size={16} /> XLSX
               </button>
               {job.status === "completed" && (
-                <button
-                  type="button"
-                  className="secondary add-database-action"
-                  disabled={Boolean(job.saving) || alreadySaved}
-                  onClick={() => onSave(job)}
-                >
-                  {alreadySaved ? <CheckCircle2 size={17} /> : <DatabaseStackIcon size={17} />}
-                  {job.saving ? "Adding…" : alreadySaved ? "Added to Database" : "Add to Database"}
-                </button>
+                <div className="library-save-controls">
+                  <label className="sr-only" htmlFor="library-save-format">Library file type</label>
+                  <select
+                    id="library-save-format"
+                    value={libraryFormat}
+                    disabled={Boolean(job.saving)}
+                    onChange={(event) => setLibraryFormat(event.target.value)}
+                  >
+                    <option value="xlsx">XLSX</option>
+                    <option value="csv">CSV</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="secondary add-database-action"
+                    disabled={Boolean(job.saving) || alreadySaved}
+                    onClick={() => onSave(job, libraryFormat)}
+                  >
+                    {alreadySaved ? <CheckCircle2 size={17} /> : <DatabaseStackIcon size={17} />}
+                    {job.saving ? "Saving…" : alreadySaved ? "Saved to Library" : "Save to Library"}
+                  </button>
+                </div>
               )}
             </>
           )}
@@ -1314,24 +1327,28 @@ export default function App() {
     }
   }
 
-  async function handleAddToDatabase(job) {
+  async function handleAddToDatabase(job, format) {
+    const saveKey = `${job.jobId}:${format}`;
     if (
       !job.jobId || job.status !== "completed" ||
-      pendingSaves.current.has(job.jobId) || savedEntries.current.has(job.jobId)
+      pendingSaves.current.has(job.jobId) || savedEntries.current.has(saveKey)
     ) return;
 
     pendingSaves.current.add(job.jobId);
     updateJob(job.id, { saving: true, saveError: null });
     try {
-      const saved = await saveJobToLibrary(job.jobId, "xlsx");
-      savedEntries.current.set(job.jobId, saved);
-      updateJob(job.id, { saving: false, savedEntry: saved });
+      const saved = await saveJobToLibrary(job.jobId, format);
+      savedEntries.current.set(saveKey, saved);
+      updateJob(job.id, (current) => ({
+        saving: false,
+        savedEntries: { ...current.savedEntries, [format]: saved },
+      }));
       setLibraryRevision((value) => value + 1);
       setSaveNotice(saved);
     } catch (error) {
       updateJob(job.id, {
         saving: false,
-        saveError: errorMessage(error, "The result could not be added to Database. Please try again."),
+        saveError: formatLibraryError(error, "The result could not be saved to Library. Please try again."),
       });
     } finally {
       pendingSaves.current.delete(job.jobId);
@@ -1339,12 +1356,14 @@ export default function App() {
   }
 
   function handleLibraryDelete(fileId) {
-    for (const [jobId, saved] of savedEntries.current) {
-      if (saved.file_id === fileId) savedEntries.current.delete(jobId);
+    for (const [saveKey, saved] of savedEntries.current) {
+      if (saved.file_id === fileId) savedEntries.current.delete(saveKey);
     }
-    setJobs((items) => items.map((job) => job.savedEntry?.file_id === fileId
-      ? { ...job, savedEntry: null }
-      : job));
+    setJobs((items) => items.map((job) => ({
+      ...job,
+      savedEntries: Object.fromEntries(Object.entries(job.savedEntries ?? {})
+        .filter(([, saved]) => saved.file_id !== fileId)),
+    })));
     setSaveNotice((notice) => notice?.file_id === fileId ? null : notice);
   }
 
@@ -1597,7 +1616,7 @@ export default function App() {
           <CheckCircle2 size={21} className="database-toast-icon" />
           <div className="database-toast-copy">
             <div role="status">
-              <strong>Added to Database</strong>
+              <strong>Saved to Library</strong>
               <span>{saveNotice.filename}</span>
             </div>
             <button type="button" className="text-button" onClick={() => {
@@ -1622,3 +1641,5 @@ export default function App() {
     </>
   );
 }
+
+export { BatchTable, EvidenceDrawer, FieldCard, PersonSkeleton };

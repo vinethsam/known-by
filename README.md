@@ -31,17 +31,25 @@ backend result. Profile values, confidence, coverage, evidence, alternatives,
 conflicts, and review codes come directly from that result. CSV and XLSX
 exports are downloaded from the backend.
 
+The shared field configuration displays Full Name, Country of Origin,
+Organisation, Job Title, University Name, Degree Type, Subject, and Profile
+Link in that order across person results, batch tables, and loading states.
+Country confidence and evidence use the same field details as every other
+field. Older results without a country remain supported and show Not found.
+
 History is kept for the current browser session only.
 
 ## Shared Library
 
-Completed research can be saved with **Add to Database** beside the CSV and
-XLSX export buttons. It retains an XLSX copy through the existing library API,
-shows a confirmation with a shortcut to Database, and prevents repeated saves
-for the same job in the current session. Deleting that saved entry enables
+Completed research can be saved with **Save to Library** beside the CSV and
+XLSX export buttons. Choose CSV or XLSX to retain a copy through the existing
+library API. A confirmation links to Database, and the action prevents repeated saves
+for the same job and format in the current session. Deleting that saved entry enables
 adding it again. The Database tab shows the team's shared saved files, with download and
 confirmed delete actions. File names and saved dates come from the backend;
-the page shows a saver name only if the backend supplies one. Library requests
+compact rows always show the saver identity supplied by the backend, or
+Unknown when unavailable. The current shared-token backend does not identify
+individual savers; the frontend never infers identity from the browser. Library requests
 use the same authenticated `/api/*` proxy as research requests.
 
 ## Startup and account UI
@@ -49,7 +57,8 @@ use the same authenticated `/api/*` proxy as research requests.
 The app opens with a brief Thinking Orbs startup card over the existing
 gradient, then fades into the interface. It never waits on the research
 service. Reduced motion uses a paused orb and a shorter transition. Thinking
-Orbs is used only at startup; research keeps its existing skeleton loader.
+Orbs is used only at startup, tinted with KnownBy's existing accent color;
+research keeps its existing skeleton loader.
 
 The header account button opens the signed-out account dialog. Google sign-in
 is visibly unavailable until a real authentication backend is connected.

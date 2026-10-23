@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   formatScoringValue,
+  formatLibrarySavedDate,
+  formatLibraryError,
   getJobProgress,
   getJobProgressSummary,
   getSavedBy,
@@ -73,4 +75,34 @@ test("saved-by identity is shown only when the service provides it", () => {
   assert.equal(getSavedBy({ saved_by: "  Jane Doe  " }), "Jane Doe");
   assert.equal(getSavedBy({ added_by: "Alex" }), "Alex");
   assert.equal(getSavedBy({ filename: "KnownBy.xlsx" }), "");
+});
+
+test("saved-by uses genuine structured creator metadata and prefers a readable name", () => {
+  assert.equal(getSavedBy({ saved_by: { display_name: "  Jane Doe ", email: "jane@example.test" } }), "Jane Doe");
+  assert.equal(getSavedBy({ created_by: { username: "alex", email: "alex@example.test" } }), "alex");
+  assert.equal(getSavedBy({ creator: { email: "sam@example.test" } }), "sam@example.test");
+  assert.equal(getSavedBy({ creator_email: "rory@example.test" }), "rory@example.test");
+});
+
+test("empty identity aliases do not mask usable metadata or invent an identity", () => {
+  assert.equal(getSavedBy({ saved_by: " ", added_by: null, creator_name: "Taylor" }), "Taylor");
+  assert.equal(getSavedBy({ saved_by: {}, created_by: { name: "Ari" } }), "Ari");
+  assert.equal(getSavedBy({ created_by: { id: "internal-user-id" } }), "");
+  assert.equal(getSavedBy({ saved_by: ["not an identity"], creator_name: 42 }), "");
+  assert.equal(getSavedBy(null), "");
+});
+
+test("library dates use the supplied save timestamp and handle older missing metadata", () => {
+  assert.equal(formatLibrarySavedDate("2026-10-23T12:00:00Z", "en-GB"), "23 Oct 2026");
+  assert.equal(formatLibrarySavedDate(null, "en-GB"), "Date unavailable");
+  assert.equal(formatLibrarySavedDate("invalid-date", "en-GB"), "Date unavailable");
+});
+
+test("library errors explain safe actions without exposing backend details", () => {
+  const raw = "SQL failed for secret storage-id and internal job-id";
+  assert.equal(formatLibraryError({ status: 500, message: raw }, "Unable to save this result."), "Unable to save this result.");
+  assert.equal(formatLibraryError({ message: raw }, "Unable to load files."), "Unable to load files.");
+  assert.match(formatLibraryError({ status: 403, message: raw }), /permission/);
+  assert.match(formatLibraryError({ code: "NETWORK_ERROR", message: raw }), /connection/);
+  assert.match(formatLibraryError({ status: 404, message: raw }), /no longer available/);
 });

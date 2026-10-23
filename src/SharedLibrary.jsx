@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -9,10 +9,9 @@ import {
 import {
   deleteLibraryFile,
   downloadLibraryFile,
-  formatApiError,
   listLibraryFiles,
 } from "./api.js";
-import { getSavedBy } from "./presentation.js";
+import { formatLibraryError, formatLibrarySavedDate, getSavedBy } from "./presentation.js";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import "./shared-library.css";
 
@@ -36,13 +35,6 @@ function displaySize(value) {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
-function libraryError(error, fallback) {
-  const message = formatApiError(error);
-  return message && message !== "Something went wrong while contacting the research service."
-    ? message
-    : fallback;
-}
-
 export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,11 +48,6 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
   const [reloadToken, setReloadToken] = useState(0);
   const [announcement, setAnnouncement] = useState("");
   const loadMoreController = useRef(null);
-
-  const includesSavedBy = useMemo(
-    () => files.some((file) => Boolean(getSavedBy(file))),
-    [files],
-  );
 
   const reload = useCallback(() => {
     setReloadToken((value) => value + 1);
@@ -84,7 +71,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
       })
       .catch((error) => {
         if (error?.name === "AbortError" || error?.code === "REQUEST_ABORTED") return;
-        setLoadError(libraryError(error, "Unable to load Shared Library."));
+        setLoadError(formatLibraryError(error, "Unable to load Shared Library."));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -131,7 +118,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
     } catch (error) {
       if (error?.name === "AbortError" || error?.code === "REQUEST_ABORTED") return;
       setActionError(
-        libraryError(error, "Unable to load more saved files."),
+        formatLibraryError(error, "Unable to load more saved files."),
       );
     } finally {
       if (loadMoreController.current === controller) {
@@ -151,7 +138,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
       setAnnouncement(`Downloaded ${result?.filename || file.filename}.`);
     } catch (error) {
       setActionError(
-        libraryError(error, `Unable to download ${file.filename}.`),
+        formatLibraryError(error, `Unable to download ${file.filename}.`),
       );
     } finally {
       setDownloading("");
@@ -173,7 +160,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
       onDelete?.(file.file_id);
     } catch (error) {
       setActionError(
-        libraryError(error, `Unable to delete ${file.filename}.`),
+        formatLibraryError(error, `Unable to delete ${file.filename}.`),
       );
     } finally {
       setDeleting("");
@@ -244,10 +231,8 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
             <thead>
               <tr>
                 <th scope="col">File name</th>
-                <th scope="col">Saved date</th>
-                {includesSavedBy && <th scope="col">Saved by</th>}
-                <th scope="col">File type</th>
-                <th scope="col">File size</th>
+                <th scope="col">Saved by</th>
+                <th scope="col">Date saved</th>
                 <th scope="col" className="shared-library__actions-heading">
                   Actions
                 </th>
@@ -260,30 +245,32 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
                 const isDeleting = deleting === file.file_id;
                 return (
                   <tr key={file.file_id}>
-                    <td data-label="File name">
+                    <td className="shared-library__file-cell" data-label="File name">
                       <span className="shared-library__file-name">
                         <FileSpreadsheet size={19} />
-                        <strong title={file.filename}>{file.filename}</strong>
+                        <span className="shared-library__file-details">
+                          <strong title={file.filename}>{file.filename}</strong>
+                          <span className="shared-library__file-metadata">
+                            <span>{String(file.format || "").toUpperCase() || "—"}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{displaySize(file.size_bytes)}</span>
+                          </span>
+                        </span>
                       </span>
                     </td>
-                    <td data-label="Saved date">
+                    <td className="shared-library__saved-by" data-label="Saved by">
+                      <span className="shared-library__mobile-label">Saved by </span>
+                      {getSavedBy(file) || "Unknown"}
+                    </td>
+                    <td className="shared-library__saved-date" data-label="Date saved">
                       {file.saved_at ? (
-                        <time dateTime={file.saved_at}>
-                          {displayDate(file.saved_at)}
+                        <time dateTime={file.saved_at} title={displayDate(file.saved_at)}>
+                          {formatLibrarySavedDate(file.saved_at)}
                         </time>
                       ) : (
-                        "—"
+                        "Date unavailable"
                       )}
                     </td>
-                    {includesSavedBy && (
-                      <td data-label="Saved by">{getSavedBy(file) || "—"}</td>
-                    )}
-                    <td data-label="File type">
-                      <span className="shared-library__format">
-                        {String(file.format || "").toUpperCase() || "—"}
-                      </span>
-                    </td>
-                    <td data-label="File size">{displaySize(file.size_bytes)}</td>
                     <td data-label="Actions" className="shared-library__actions-cell">
                       {isConfirming ? (
                         <div

@@ -71,10 +71,47 @@ export function getJobProgressSummary(job) {
 }
 
 export function getSavedBy(file) {
-  const value =
-    file?.saved_by ??
-    file?.added_by ??
-    file?.creator_name ??
-    file?.created_by;
-  return typeof value === "string" && value.trim() ? value.trim() : "";
+  const text = (value) => typeof value === "string" ? value.trim() : "";
+  const identity = (value) => {
+    if (typeof value === "string") return text(value);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+    return [value.display_name, value.name, value.username, value.email]
+      .map(text).find(Boolean) || "";
+  };
+
+  return [
+    file?.saved_by,
+    file?.added_by,
+    file?.creator_name,
+    file?.creator_display_name,
+    file?.created_by,
+    file?.creator,
+    file?.saved_by_name,
+    file?.added_by_name,
+    file?.creator_username,
+    file?.creator_email,
+  ].map(identity).find(Boolean) || "";
+}
+
+export function formatLibrarySavedDate(value, locale) {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
+}
+
+export function formatLibraryError(error, fallback = "Unable to complete this library action. Please try again.") {
+  if (error?.code === "NETWORK_ERROR") {
+    return "Could not reach Shared Library. Check your connection and try again.";
+  }
+  return {
+    401: "Shared Library access requires authorization. Contact your administrator.",
+    403: "You do not have permission to use Shared Library.",
+    404: "This research or saved file is no longer available. Refresh and try again.",
+    409: "This action is not available in the current state. Refresh and try again.",
+    413: "This research export is too large to save to Shared Library.",
+    429: "Shared Library is busy. Please try again shortly.",
+    507: "Shared Library is full. Remove an unneeded file and try again.",
+  }[error?.status] || fallback;
 }
