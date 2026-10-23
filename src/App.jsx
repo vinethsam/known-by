@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -665,7 +665,7 @@ function PersonSkeleton() {
   );
 }
 
-function BatchTable({ job, onSelect }) {
+const BatchTable = memo(function BatchTable({ job, onSelect }) {
   const people = [...(job.results?.people ?? [])].sort(
     (a, b) => (a.row_index ?? 0) - (b.row_index ?? 0),
   );
@@ -795,7 +795,7 @@ function BatchTable({ job, onSelect }) {
       </table>
     </div>
   );
-}
+});
 
 function Results({
   job,

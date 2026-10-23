@@ -93,12 +93,16 @@ export function getSavedBy(file) {
   ].map(identity).find(Boolean) || "";
 }
 
+const librarySavedDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
 export function formatLibrarySavedDate(value, locale) {
   if (!value) return "Date unavailable";
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? "Date unavailable"
-    : new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
+    : (locale === undefined
+      ? librarySavedDateFormatter
+      : new Intl.DateTimeFormat(locale, { dateStyle: "medium" })).format(date);
 }
 
 export function formatLibraryError(error, fallback = "Unable to complete this library action. Please try again.") {

@@ -171,3 +171,19 @@ test("batch results and batch skeleton retain all eight columns in the same orde
   assert.equal((table.match(/<td>/g) || []).length, 8);
   assert.equal((loading.match(/<td>/g) || []).length, 16);
 });
+
+test("batch rows retain input order in state while displaying ascending row numbers", () => {
+  const later = personWithCountry();
+  later.row_index = 2;
+  later.person_id = "later";
+  later.result.profile.fields.full_name.value = "Later Person";
+  const earlier = personWithCountry();
+  earlier.person_id = "earlier";
+  earlier.result.profile.fields.full_name.value = "Earlier Person";
+  const people = [later, earlier];
+  const table = render("BatchTable", {
+    job: { kind: "file", status: "completed", results: { people } },
+  });
+  assert.ok(table.indexOf("Earlier Person") < table.indexOf("Later Person"));
+  assert.deepEqual(people.map((person) => person.row_index), [2, 1]);
+});
