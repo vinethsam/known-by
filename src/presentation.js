@@ -5,6 +5,34 @@ const completedPersonStatuses = [
   "cancelled",
 ];
 
+const provenanceLabels = {
+  supplied: "Supplied input; not independently verified",
+  researched: "Independently researched",
+  corroborated: "Supplied input corroborated by research",
+  conflicting: "Supplied input conflicts with research",
+  superseded: "Supplied input superseded by research",
+};
+
+export function getFieldProvenanceLabel(decision) {
+  return provenanceLabels[decision?.provenance_status] || "";
+}
+
+export function getFieldConfidence(decision) {
+  if (decision?.provenance_status === "supplied" && decision.value &&
+      decision.scoring_components?.confidence_kind === "seed_input_certainty") {
+    return { value: decision.input_confidence ?? decision.confidence, label: "input certainty" };
+  }
+  if (typeof decision?.research_confidence === "number") {
+    return { value: decision.research_confidence, label: "research confidence" };
+  }
+  return { value: decision?.confidence, label: "confidence" };
+}
+
+export function formatInputValue(value) {
+  if (value === null || value === undefined) return "—";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
 export function formatScoringValue(value) {
   if (value === null || value === undefined) return "—";
   if (typeof value === "number") {

@@ -25,7 +25,7 @@ import {
   saveJobToLibrary,
 } from "./api.js";
 import { fields } from "./data.js";
-import { formatLibraryError, formatScoringValue, getJobProgress, getJobProgressSummary } from "./presentation.js";
+import { formatInputValue, formatLibraryError, formatScoringValue, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import SharedLibrary from "./SharedLibrary.jsx";
@@ -118,6 +118,13 @@ function EvidenceDrawer({ selection, onClose }) {
   const profile = result?.profile;
   const decision = profile?.fields?.[field];
   const label = fieldLabel(field);
+  const confidence = getFieldConfidence(decision);
+  const provenanceLabel = getFieldProvenanceLabel(decision);
+  const seedAttributes = profile?.seed_attributes ?? [];
+  const fieldInputs = seedAttributes.filter((attribute) => attribute.field === field);
+  const suppliedInputs = fieldInputs.length
+    ? fieldInputs
+    : (decision?.supplied_values ?? []).map((value) => ({ value, input_confidence: decision.input_confidence }));
 
   const evidence = useMemo(() => {
     const claims = result?.claims ?? [];
@@ -235,6 +242,24 @@ function EvidenceDrawer({ selection, onClose }) {
           </p>
         </div>
 
+        {suppliedInputs.length > 0 && (
+          <section className="claim-section">
+            <h3>Supplied information</h3>
+            <p>Input certainty records what was supplied. It is not independent verification.</p>
+            {suppliedInputs.map((attribute, index) => (
+              <article className="claim-card" key={`${attribute.column ?? field}-${index}`}>
+                <strong>{formatInputValue(attribute.value)}</strong>
+                <div className="claim-meta">
+                  {attribute.column && <span>{attribute.column}</span>}
+                  <span>{formatPercent(attribute.input_confidence)} input certainty</span>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {provenanceLabel && <p className="claim-meta">{provenanceLabel}</p>}
+
         {!decision ? (
           <div className="evidence-empty">
             <AlertCircle size={19} />
@@ -249,7 +274,7 @@ function EvidenceDrawer({ selection, onClose }) {
         ) : (
           <>
             <section className="field-value-card">
-              <h3>Selected value</h3>
+              <h3>{provenanceLabel ? (confidence.label === "input certainty" ? "Supplied value" : "Researched value") : "Selected value"}</h3>
               {decision.value ? (
                 field === "profile_link" && safeHttpUrl(decision.value) ? (
                   <a
@@ -270,9 +295,15 @@ function EvidenceDrawer({ selection, onClose }) {
 
             <div className="evidence-stats">
               <div className="evidence-stat">
-                <span>Confidence</span>
-                <strong>{formatPercent(decision.confidence)}</strong>
+                <span>{titleCase(confidence.label)}</span>
+                <strong>{formatPercent(confidence.value)}</strong>
               </div>
+              {confidence.label === "input certainty" && (
+                <div className="evidence-stat">
+                  <span>Research confidence</span>
+                  <strong>{formatPercent(decision.research_confidence)}</strong>
+                </div>
+              )}
               <div className="evidence-stat">
                 <span>Review status</span>
                 <StatusBadge
@@ -387,6 +418,22 @@ function EvidenceDrawer({ selection, onClose }) {
               )}
           </>
         )}
+
+        {seedAttributes.length > 0 && (
+          <details className="scoring-details">
+            <summary>View all supplied input</summary>
+            <p>Original columns are preserved as input metadata. They are not independent research evidence.</p>
+            <dl className="scoring-grid">
+              {seedAttributes.map((attribute, index) => (
+                <div key={`${attribute.column}-${index}`}>
+                  <dt>{attribute.column}</dt>
+                  <dd>{formatInputValue(attribute.value)}</dd>
+                  <dd>{formatPercent(attribute.input_confidence)} input certainty</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        )}
       </div>
     </dialog>
   );
@@ -430,7 +477,8 @@ function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
         <span className="format-label">CSV / XLSX</span>
       </div>
       <p className="workflow-description">
-        Upload a CSV or XLSX containing people.
+        Upload a CSV or XLSX containing people. Additional professional and
+        education columns are retained as supplied context.
       </p>
       <input
         ref={input}
@@ -597,6 +645,8 @@ function ProfileSummary({ person }) {
 
 function FieldCard({ field, label, person, request, onSelect }) {
   const decision = person?.result?.profile?.fields?.[field];
+  const confidence = getFieldConfidence(decision);
+  const provenanceLabel = getFieldProvenanceLabel(decision);
   const linkedSourceCount = unique(
     decision?.supporting_source_ids ?? [],
   ).length;
@@ -620,7 +670,7 @@ function FieldCard({ field, label, person, request, onSelect }) {
         {decision?.value || "Not found"}
       </span>
       <span className="field-meta">
-        <span>{formatPercent(decision?.confidence)} confidence</span>
+        <span>{formatPercent(confidence.value)} {confidence.label}</span>
         <span className="field-source-count">
           {sourceCount} {sourceCount === 1 ? "source" : "sources"}
         </span>
@@ -628,6 +678,7 @@ function FieldCard({ field, label, person, request, onSelect }) {
           <span className="review-dot">Review</span>
         )}
       </span>
+      {provenanceLabel && <span className="field-meta">{provenanceLabel}</span>}
     </button>
   );
 }
@@ -742,6 +793,8 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
             <tr key={person.person_id || person.row_index}>
               {fields.map(([key, label]) => {
                 const decision = person.result?.profile?.fields?.[key];
+                const confidence = getFieldConfidence(decision);
+                const provenanceLabel = getFieldProvenanceLabel(decision);
                 const originalName =
                   person.original_row?.full_name ??
                   person.original_row?.name ??
@@ -772,7 +825,7 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
                       </span>
                       <span className="field-meta">
                         {decision
-                          ? `${formatPercent(decision.confidence)} confidence`
+                          ? `${formatPercent(confidence.value)} ${confidence.label}`
                           : person.error_code
                             ? titleCase(person.error_code)
                             : titleCase(person.status)}
@@ -785,6 +838,7 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
                           <span className="review-dot">Review</span>
                         )}
                       </span>
+                      {provenanceLabel && <span className="field-meta">{provenanceLabel}</span>}
                     </button>
                   </td>
                 );

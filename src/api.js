@@ -17,6 +17,9 @@ const PERSON_STATUSES = new Set([
 ]);
 const EXPORT_FORMATS = new Set(["csv", "xlsx"]);
 const PROVENANCE_MODES = new Set(["none", "field"]);
+const FIELD_PROVENANCE_STATUSES = new Set([
+  "supplied", "researched", "corroborated", "conflicting", "superseded",
+]);
 const JSON_HEADERS = {
   Accept: "application/json",
   "Content-Type": "application/json",
@@ -241,12 +244,26 @@ function isFieldDecision(value) {
       typeof value.selected_claim_id === "string") &&
     typeof value.review_required === "boolean" &&
     isRecord(value.scoring_components) &&
+    (value.supplied_values === undefined ||
+      (Array.isArray(value.supplied_values) && value.supplied_values.every((item) => typeof item === "string"))) &&
+    (value.input_confidence === undefined || value.input_confidence === null || value.input_confidence === 100) &&
+    (value.research_confidence === undefined || value.research_confidence === null ||
+      (typeof value.research_confidence === "number" && Number.isFinite(value.research_confidence) &&
+        value.research_confidence >= 0 && value.research_confidence <= 100)) &&
+    (value.provenance_status === undefined || value.provenance_status === null || FIELD_PROVENANCE_STATUSES.has(value.provenance_status)) &&
     listKeys.every(
       (key) =>
         Array.isArray(value[key]) &&
         value[key].every((item) => typeof item === "string"),
     )
   );
+}
+
+function isSeedAttribute(value) {
+  return isRecord(value) && typeof value.column === "string" &&
+    Object.hasOwn(value, "value") &&
+    (value.field === null || typeof value.field === "string") &&
+    typeof value.category === "string" && value.input_confidence === 100;
 }
 
 function isSourceRecord(value) {
@@ -294,6 +311,8 @@ function isResearchResult(value) {
     typeof value.profile.input_name === "string" &&
     typeof value.profile.review_required === "boolean" &&
     Number.isInteger(value.profile.sources_used) &&
+    (value.profile.seed_attributes === undefined ||
+      (Array.isArray(value.profile.seed_attributes) && value.profile.seed_attributes.every(isSeedAttribute))) &&
     Object.values(value.profile.fields).every(isFieldDecision) &&
     value.sources.every(isSourceRecord) &&
     value.claims.every(isEvidenceClaim) &&

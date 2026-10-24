@@ -139,6 +139,31 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     assert.equal(new Headers(request.init.headers).has("Authorization"), false);
   });
 
+  test("uploads rich CSV and XLSX files unchanged, including unknown and administrative columns", async () => {
+    const csv = "Full Name,University,Field of Study,Previous Employer,LIST_NAME,Custom Attribute\r\nAda Example,Example University,Physics,Example Company,Batch A,Original value\r\n";
+    // XLSX is an opaque ZIP payload to the browser transport, just like the real
+    // workbook. Parsing and column normalization belong to the backend.
+    const fixtures = [
+      new File([csv], "rich.csv", { type: "text/csv" }),
+      new File([new Uint8Array([80, 75, 3, 4, 0, 255, 128, 13, 10])], "rich.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    ];
+    const uploaded = [];
+    globalThis.fetch = async (_url, init) => {
+      uploaded.push(init.body.get("file"));
+      return jsonResponse({ job_id: "rich-job", status: "queued", total_people: 1 });
+    };
+
+    for (const file of fixtures) await researchBatch(file);
+
+    for (const [index, file] of fixtures.entries()) {
+      assert.equal(uploaded[index], file);
+      assert.deepEqual(await uploaded[index].arrayBuffer(), await file.arrayBuffer());
+    }
+    assert.equal(await uploaded[0].text(), csv);
+  });
+
   test("uses encoded job paths for status, results, and cancellation", async () => {
     const requests = [];
     globalThis.fetch = async (url, init) => {
@@ -159,6 +184,61 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       ],
     );
     assert.equal(requests[2].init.method, "POST");
+  });
+
+  test("retains supplied input and provenance without changing legacy result compatibility", async () => {
+    const decision = {
+      value: "Researched University", confidence: 87, selected_claim_id: null,
+      review_required: true, scoring_components: {}, supporting_claim_ids: [],
+      supporting_source_ids: [], sources: [], conflicting_claim_ids: [],
+      alternative_claim_ids: [], review_reason_codes: [],
+    };
+    const profile = {
+      input_name: "Test Person", profile_confidence: 60, coverage: 16.67,
+      review_required: true, sources_used: 0, fields: { university_name: decision },
+    };
+    const payload = {
+      ...jobResults,
+      people: [{
+        person_id: "rich-person", row_index: 1, status: "review_required", error_code: null,
+        original_row: { "Full Name": "Test Person", University: "Supplied University", LIST_NAME: "Batch A" },
+        result: { profile, sources: [], claims: [], usage: [] },
+      }],
+    };
+    globalThis.fetch = async () => jsonResponse(payload);
+    assert.deepEqual(await getJobResults("job/id"), payload);
+
+    Object.assign(decision, {
+      supplied_values: ["Supplied University"], input_confidence: 100,
+      research_confidence: 87, provenance_status: "conflicting",
+    });
+    profile.seed_attributes = [
+      { column: "University", value: "Supplied University", field: "university_name", category: "biographical", input_confidence: 100 },
+      { column: "LIST_NAME", value: "Batch A", field: null, category: "administrative", input_confidence: 100 },
+      { column: "Custom Attribute", value: { nested: ["original", 42] }, field: null, category: "unknown", input_confidence: 100 },
+    ];
+    assert.deepEqual(await getJobResults("job/id"), payload);
+    assert.equal(profile.profile_confidence, 60);
+    assert.equal(profile.coverage, 16.67);
+
+    for (const malformed of [
+      { supplied_values: "not an array" }, { input_confidence: 90 },
+      { research_confidence: 101 }, { provenance_status: "verified_by_input" },
+    ]) {
+      globalThis.fetch = async () => jsonResponse({
+        ...payload,
+        people: [{ ...payload.people[0], result: { ...payload.people[0].result,
+          profile: { ...profile, fields: { university_name: { ...decision, ...malformed } } },
+        } }],
+      });
+      await assert.rejects(getJobResults("job/id"), { code: "MALFORMED_RESPONSE" });
+    }
+    globalThis.fetch = async () => jsonResponse({ ...payload,
+      people: [{ ...payload.people[0], result: { ...payload.people[0].result,
+        profile: { ...profile, seed_attributes: { University: "wrong shape" } },
+      } }],
+    });
+    await assert.rejects(getJobResults("job/id"), { code: "MALFORMED_RESPONSE" });
   });
 
   test("saves completed exports with the library request contract", async () => {
