@@ -13,14 +13,38 @@ const provenanceLabels = {
   superseded: "Supplied input superseded by research",
 };
 
+export function getPersonProfile(person) {
+  if (person?.result?.profile) return person.result.profile;
+  if (person?.supplied_fields) return {
+    fields: person.supplied_fields,
+    seed_attributes: person.seed_attributes ?? [],
+    profile_confidence: 0, coverage: 0, sources_used: 0,
+    review_required: Object.values(person.supplied_fields).some((field) => field?.review_required), status: person.status,
+  };
+  return null;
+}
+
 export function getFieldProvenanceLabel(decision) {
   return provenanceLabels[decision?.provenance_status] || "";
 }
 
+export function getRelationshipLabel(decision) {
+  const details = decision?.scoring_components;
+  const historical = details?.relationship_temporal_status === "historical" ||
+    decision?.review_reason_codes?.includes("HISTORICAL_PROFESSIONAL_AFFILIATION");
+  const type = {
+    principal_professional_practice: "Principal professional practice",
+    secondary_academic_role: "Secondary academic affiliation",
+  }[details?.relationship_type];
+  if (historical) return `${type || "Professional affiliation"} · Historical`;
+  if (details?.relationship_temporal_status === "current") return `${type || "Professional affiliation"} · Current`;
+  if (type) return `${type} · Timing unspecified`;
+  return "";
+}
+
 export function getFieldConfidence(decision) {
-  if (decision?.provenance_status === "supplied" && decision.value &&
-      decision.scoring_components?.confidence_kind === "seed_input_certainty") {
-    return { value: decision.input_confidence ?? decision.confidence, label: "input certainty" };
+  if (decision?.provenance_status === "supplied" && decision.value && !(decision.research_confidence > 0)) {
+    return { value: decision.input_confidence ?? 100, label: "input certainty" };
   }
   if (typeof decision?.research_confidence === "number") {
     return { value: decision.research_confidence, label: "research confidence" };
@@ -73,7 +97,8 @@ export function getJobProgress(job) {
     queued: "Waiting for research to start",
     running: isBatch ? "Researching people" : "Researching person",
     completed: "Research complete",
-    partial: "Research partially complete",
+    partial: total > 0 && finished === total ? "Research completed with issues" : "Research partially complete",
+    completed_with_issues: "Research completed with issues",
     failed: "Research failed",
     cancelled: "Research cancelled",
   }[job?.status] ?? "Research status unavailable";

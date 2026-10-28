@@ -1059,12 +1059,16 @@ input:disabled {
 }
 .status-badge {
   display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   gap: 7px;
   width: fit-content;
   min-height: 23px;
-  padding: 4px 9px;
+  padding: 4px 11px;
+  max-width: 100%;
   border: 1px solid #aab7ff24;
   border-radius: 999px;
   background: #aab7ff09;
@@ -1110,6 +1114,7 @@ input:disabled {
   background: #4eae7912;
 }
 .status-badge.partial,
+.status-badge.completed_with_issues,
 .status-badge.review_required,
 .status-badge.status-partial,
 .status-badge.status-review_required {
@@ -1402,6 +1407,10 @@ input:disabled {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+.result-cell .field-meta {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
 .person-row-status {
   display: inline-flex;
   align-items: center;
@@ -1410,6 +1419,7 @@ input:disabled {
   color: var(--quiet);
   font-size: 9px;
   line-height: 1.4;
+  white-space: nowrap;
 }
 .terminal-empty {
   min-height: 210px;
@@ -1477,8 +1487,8 @@ a.field-value:hover {
   background: #adbaff08;
   box-shadow: inset 0 1px 0 #e5eaff08;
 }
-.evidence-stat strong,
-.evidence-stat span {
+.evidence-stat > strong,
+.evidence-stat > span:not(.status-badge) {
   display: block;
 }
 .evidence-stat strong {
@@ -1486,7 +1496,7 @@ a.field-value:hover {
   font-size: 14px;
   font-weight: 650;
 }
-.evidence-stat span {
+.evidence-stat > span:not(.status-badge) {
   margin-top: 4px;
   color: var(--quiet);
   font-size: 9px;
@@ -1510,7 +1520,20 @@ a.field-value:hover {
   overflow-wrap: anywhere;
 }
 .claim-section {
-  margin-top: 26px;
+  margin-top: 20px;
+}
+.claim-section > p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.relationship-context {
+  margin-top: 12px;
+  color: #d9bd76;
+  font-size: 11px;
+  line-height: 1.6;
 }
 .claim-section > h3 {
   margin-bottom: 12px;
@@ -1519,7 +1542,8 @@ a.field-value:hover {
   font-weight: 650;
 }
 .claim-card {
-  padding: 15px 16px;
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
   border: 1px solid #a8b6f41c;
   border-radius: 8px;
   background: #a7b5f608;
@@ -1653,7 +1677,7 @@ a.field-value:hover {
 .scoring-grid > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(92px, auto);
-  gap: 14px;
+  gap: 6px 14px;
   align-items: baseline;
   padding: 9px 0;
   border-bottom: 1px solid #aab7ff12;

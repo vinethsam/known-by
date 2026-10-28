@@ -9,6 +9,7 @@ import {
   downloadLibraryFile,
   getJob,
   getJobResults,
+  getLibraryRecords,
   listLibraryFiles,
   researchBatch,
   researchPerson,
@@ -66,6 +67,20 @@ const savedFile = {
   size_bytes: 128,
   list_name: "Forbes 2000",
 };
+
+test("saved records use authenticated pagination and reject malformed or unauthorized responses", async () => {
+  let request;
+  const payload = { file: savedFile, records: [{ full_name: "Ada Example" }], total: 51, offset: 50, limit: 50, has_more: false };
+  globalThis.fetch = async (url, init) => { request = { url, init }; return jsonResponse(payload); };
+  assert.deepEqual(await getLibraryRecords("file/id", { offset: 50, q: "Ada & Example" }), payload);
+  assert.equal(request.url, "/api/v1/library/files/file%2Fid/records?limit=50&offset=50&q=Ada+%26+Example");
+  assert.equal(request.init.credentials, "same-origin");
+  assert.throws(() => getLibraryRecords("id", { limit: 101 }), /Invalid saved-record page/);
+  globalThis.fetch = async () => jsonResponse({ ...payload, records: "bad" });
+  await assert.rejects(getLibraryRecords("id"), { code: "MALFORMED_RESPONSE" });
+  globalThis.fetch = async () => jsonResponse({ detail: "Authentication required" }, { status: 401 });
+  await assert.rejects(getLibraryRecords("id"), { status: 401 });
+});
 
 function installDownloadHarness() {
   let clicked = false;

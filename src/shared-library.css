@@ -4,6 +4,39 @@
   overflow: hidden;
 }
 
+.library-preview__toolbar, .library-preview__pagination, .library-preview__search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 30px;
+}
+.library-preview__pagination { justify-content: space-between; font-size: 12px; color: var(--muted); }
+.library-preview__search label { width: 100%; font-size: 12px; color: var(--muted); }
+.library-preview__search input {
+  flex: 1;
+  min-width: 140px;
+  width: auto;
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 1px solid #8997c02b;
+  border-radius: 7px;
+  background: #1c2032a6;
+  color: var(--text);
+  font-size: 12px;
+}
+.library-preview__search input:focus {
+  background: var(--input);
+  border-color: #8998ef;
+  box-shadow: 0 0 0 3px #7489ff12;
+}
+.library-preview h2 { overflow-wrap: anywhere; }
+.shared-library__open-file { font-size: 12px; font-weight: 600; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+.library-preview .shared-library__state { min-height: 160px; padding: 28px 24px; }
+@media (max-width: 600px) {
+  .library-preview__toolbar, .library-preview__pagination, .library-preview__search { margin: 16px; }
+}
+
 .shared-library__heading {
   margin: 0 30px;
 }

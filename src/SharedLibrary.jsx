@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDownToLine,
+  ArrowLeft,
+  Eye,
   FileSpreadsheet,
   RefreshCw,
   Trash2,
@@ -10,7 +12,9 @@ import {
   deleteLibraryFile,
   downloadLibraryFile,
   listLibraryFiles,
+  getLibraryRecords,
 } from "./api.js";
+import { libraryRecordsJob } from "./library-records.js";
 import { formatLibraryError, formatLibrarySavedDate, getSavedBy } from "./presentation.js";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import "./shared-library.css";
@@ -35,7 +39,7 @@ function displaySize(value) {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
-export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
+export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecords }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -48,6 +52,38 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
   const [reloadToken, setReloadToken] = useState(0);
   const [announcement, setAnnouncement] = useState("");
   const loadMoreController = useRef(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [recordPage, setRecordPage] = useState(null);
+  const [recordOffset, setRecordOffset] = useState(0);
+  const [recordQuery, setRecordQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState("");
+  const [previewRetry, setPreviewRetry] = useState(0);
+
+  useEffect(() => {
+    if (!selectedFile) return undefined;
+    const controller = new AbortController();
+    setRecordsLoading(true);
+    setRecordsError("");
+    getLibraryRecords(selectedFile.file_id, { limit: PAGE_SIZE, offset: recordOffset, q: recordQuery, signal: controller.signal })
+      .then((page) => { if (!controller.signal.aborted) setRecordPage(page); })
+      .catch((error) => {
+        if (!controller.signal.aborted) setRecordsError(formatLibraryError(error, "This saved file could not be previewed. You can still try downloading the original file."));
+      })
+      .finally(() => { if (!controller.signal.aborted) setRecordsLoading(false); });
+    return () => controller.abort();
+  }, [selectedFile?.file_id, recordOffset, recordQuery, previewRetry]);
+
+  function openFile(file) {
+    setRecordPage(null);
+    setRecordOffset(0);
+    setRecordQuery("");
+    setSearchInput("");
+    setRecordsError("");
+    setRecordsLoading(true);
+    setSelectedFile(file);
+  }
 
   const reload = useCallback(() => {
     setReloadToken((value) => value + 1);
@@ -156,6 +192,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
         items.filter((item) => item.file_id !== file.file_id),
       );
       setDeleteCandidate("");
+      if (selectedFile?.file_id === file.file_id) setSelectedFile(null);
       setAnnouncement(`Deleted ${file.filename} from Shared Library.`);
       onDelete?.(file.file_id);
     } catch (error) {
@@ -166,6 +203,42 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
       setDeleting("");
     }
   }
+
+  if (selectedFile) return (
+    <section className="history-panel shared-library library-preview" aria-labelledby="library-preview-title" aria-busy={recordsLoading}>
+      <div className="library-preview__toolbar">
+        <button type="button" className="secondary" onClick={() => setSelectedFile(null)}><ArrowLeft size={15} /> Back to files</button>
+        <button type="button" className="secondary" disabled={Boolean(downloading)} onClick={() => handleDownload(selectedFile)}><ArrowDownToLine size={15} /> {downloading ? "Downloading…" : "Download original"}</button>
+      </div>
+      <div className="history-heading shared-library__heading">
+        <div><h2 id="library-preview-title">{selectedFile.filename}</h2><p>Saved records · {getSavedBy(selectedFile) || "Unknown saver"} · {formatLibrarySavedDate(selectedFile.saved_at)}</p></div>
+      </div>
+      <form className="library-preview__search" onSubmit={(event) => { event.preventDefault(); setRecordOffset(0); setRecordQuery(searchInput.trim()); }}>
+        <label htmlFor="saved-record-search">Search saved records</label>
+        <input id="saved-record-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Name, organisation, university…" maxLength={200} />
+        <button className="secondary" type="submit">Search</button>
+      </form>
+      {actionError && <div className="inline-notice error shared-library__notice" role="alert">{actionError}</div>}
+      <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
+      {recordsLoading ? <div className="shared-library__state" role="status"><RefreshCw className="spin" size={22} /><p>Loading saved records…</p></div>
+        : recordsError ? <div className="shared-library__state" role="alert"><p>{recordsError}</p><button className="secondary" onClick={() => setPreviewRetry((value) => value + 1)}>Try again</button></div>
+        : recordPage?.records.length ? <>
+          {renderRecords?.(libraryRecordsJob(recordPage))}
+          <nav className="library-preview__pagination" aria-label="Saved record pages">
+            <button className="secondary" disabled={recordOffset === 0} onClick={() => setRecordOffset(Math.max(0, recordOffset - PAGE_SIZE))}>Previous</button>
+            <span>{recordOffset + 1}–{recordOffset + recordPage.records.length} of {recordPage.total} records</span>
+            <button className="secondary" disabled={!recordPage.has_more} onClick={() => setRecordOffset(recordOffset + PAGE_SIZE)}>Next</button>
+          </nav>
+        </> : <div className="shared-library__state"><h3>{recordQuery ? "No matching records" : "No saved records"}</h3><p>{recordQuery ? "Try another search." : "This file does not contain research rows."}</p></div>}
+      <div className="library-preview__toolbar">
+        {deleteCandidate === selectedFile.file_id ? <div className="shared-library__delete-confirmation" role="group" aria-label={`Delete ${selectedFile.filename}`}>
+          <span>Delete this saved result?</span>
+          <button className="secondary" disabled={Boolean(deleting)} onClick={() => setDeleteCandidate("")}>Cancel</button>
+          <button className="secondary shared-library__danger-button" disabled={Boolean(deleting)} onClick={() => handleDelete(selectedFile)}>{deleting ? "Deleting…" : "Delete"}</button>
+        </div> : <button className="secondary" onClick={() => setDeleteCandidate(selectedFile.file_id)}><Trash2 size={15} /> Delete saved file</button>}
+      </div>
+    </section>
+  );
 
   return (
     <section
@@ -249,7 +322,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
                       <span className="shared-library__file-name">
                         <FileSpreadsheet size={19} />
                         <span className="shared-library__file-details">
-                          <strong title={file.filename}>{file.filename}</strong>
+                          <button type="button" className="text-button shared-library__open-file" onClick={() => openFile(file)} title={file.filename}>{file.filename}</button>
                           <span className="shared-library__file-metadata">
                             <span>{String(file.format || "").toUpperCase() || "—"}</span>
                             <span aria-hidden="true">·</span>
@@ -299,6 +372,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0 }) {
                         </div>
                       ) : (
                         <div className="shared-library__actions">
+                          <button type="button" className="secondary shared-library__compact-button" onClick={() => openFile(file)}><Eye size={15} /> View records</button>
                           <button
                             type="button"
                             className="secondary shared-library__compact-button"

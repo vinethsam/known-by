@@ -52,7 +52,7 @@ test("failed and review-required people count as finished", () => {
 
   assert.equal(progress.finished, 3);
   assert.equal(progress.percentage, 100);
-  assert.equal(progress.stage, "Research partially complete");
+  assert.equal(progress.stage, "Research completed with issues");
 });
 
 test("long-running batches show a human-readable current and total count", () => {

@@ -3,6 +3,7 @@ const JOB_STATUSES = new Set([
   "queued",
   "running",
   "completed",
+  "completed_with_issues",
   "partial",
   "failed",
   "cancelled",
@@ -328,6 +329,8 @@ function isPersonResult(value) {
     isRecord(value.original_row) &&
     PERSON_STATUSES.has(value.status) &&
     (value.error_code === null || typeof value.error_code === "string") &&
+    (value.supplied_fields === undefined || (isRecord(value.supplied_fields) && Object.values(value.supplied_fields).every(isFieldDecision))) &&
+    (value.seed_attributes === undefined || (Array.isArray(value.seed_attributes) && value.seed_attributes.every(isSeedAttribute))) &&
     (value.result === null || isResearchResult(value.result))
   );
 }
@@ -506,6 +509,22 @@ export function listLibraryFiles(options = {}) {
     isSavedResultFileList,
     "library files",
   );
+}
+
+export function getLibraryRecords(fileId, options = {}) {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) {
+    throw new ApiError("Invalid saved-record page.", { code: "INVALID_LIBRARY_PAGE" });
+  }
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (options.q?.trim()) query.set("q", options.q.trim());
+  return validateResponse(requestJson(`${pathForLibraryFile(fileId)}/records?${query}`, {
+    headers: { Accept: "application/json" }, signal: options.signal,
+  }), (value) => isRecord(value) && isSavedResultFile(value.file) &&
+    Array.isArray(value.records) && value.records.every(isRecord) &&
+    Number.isInteger(value.total) && value.total >= 0 && Number.isInteger(value.offset) &&
+    Number.isInteger(value.limit) && typeof value.has_more === "boolean", "saved records");
 }
 
 export async function deleteLibraryFile(fileId, options = {}) {

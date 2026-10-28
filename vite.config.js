@@ -11,6 +11,7 @@ const API_ROUTES = [
   ["POST", /^\/v1\/jobs\/[^/]+\/library$/],
   ["GET", /^\/v1\/library\/files$/],
   ["GET", /^\/v1\/library\/files\/[^/]+$/],
+  ["GET", /^\/v1\/library\/files\/[^/]+\/records$/],
   ["DELETE", /^\/v1\/library\/files\/[^/]+$/],
 ];
 

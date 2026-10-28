@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import { fields } from "../src/data.js";
+import { libraryRecordsJob } from "../src/library-records.js";
 
 let server;
 let components;
@@ -78,6 +79,25 @@ function render(name, props = {}) {
 function labelsIn(html, pattern) {
   return [...html.matchAll(pattern)].map((match) => match[1]);
 }
+
+test("saved record text is escaped and source links reject active URL schemes", () => {
+  const job = libraryRecordsJob({ file: { file_id: "safe", filename: "legacy.csv" }, offset: 0, records: [{
+    full_name: '<img src=x onerror="alert(1)">',
+    profile_link: "javascript:alert(1)", profile_link_source_urls: "javascript:alert(2);https://example.org/real-source",
+    source_urls: "data:text/html,<script>alert(3)</script>;https://example.org/record",
+  }] });
+  const person = job.results.people[0];
+  const table = render("BatchTable", { job, onSelect() {} });
+  assert.doesNotMatch(table, /<img src=x/);
+  assert.match(table, /&lt;img/);
+  const detail = render("EvidenceDrawer", { selection: { field: "profile_link", person, request: job }, onClose() {} });
+  assert.doesNotMatch(detail, /href="(?:javascript|data):/);
+  assert.match(detail, /href="https:\/\/example.org\/real-source"/);
+  const aggregate = render("EvidenceDrawer", { selection: { field: "full_name", person, request: job }, onClose() {} });
+  assert.doesNotMatch(aggregate, /href="(?:javascript|data):|<script>/);
+  assert.match(aggregate, /Support for this individual field is unavailable/);
+  assert.match(aggregate, /href="https:\/\/example.org\/record"/);
+});
 
 test("the shared schema and person skeleton show all eight fields in backend order", () => {
   assert.deepEqual(fields.map(([, label]) => label), expectedLabels);
@@ -290,4 +310,67 @@ test("historical employment remains original input and does not populate a curre
   assert.match(drawer, /No field result/);
   assert.doesNotMatch(drawer, /<h3>Supplied information/);
   assert.match(drawer, /<dt>Previous Employer<\/dt><dd>Historical Company/);
+});
+
+test("terminal rendering never flashes an empty message before results hydrate", () => {
+  const job = { kind: "file", status: "completed", jobId: "job", totalPeople: 1, results: null };
+  const pending = render("BatchTable", { job });
+  assert.match(pending, /File research fields loading/);
+  assert.doesNotMatch(pending, /No person results|job ended/);
+  assert.match(render("BatchTable", { job: { ...job, resultsState: "empty", results: { people: [] } } }), /No person results/);
+  assert.doesNotMatch(render("BatchTable", { job: { ...job, resultsState: "error", error: "Unable to load" } }), /No person results/);
+});
+
+test("failed research still renders all supplied fields and separate certainty in details", () => {
+  const person = { status: "failed", row_index: 1, person_id: "failed", result: null, error_code: "PROVIDER_ERROR",
+    supplied_fields: { organisation: { value: "6a architects", confidence: 0, research_confidence: 0, input_confidence: 100,
+      provenance_status: "supplied", supplied_values: ["6a architects"], review_required: true } }, seed_attributes: [] };
+  assert.match(render("BatchTable", { job: { status: "failed", results: { people: [person] } } }), /6a architects.*?<\/span>/);
+  const drawer = render("EvidenceDrawer", { selection: { field: "organisation", person, request } });
+  assert.match(drawer, /100% input certainty/);
+  assert.match(drawer, /Research confidence<\/span><strong>0%/);
+  assert.doesNotMatch(drawer, /No field result/);
+});
+
+test("Save to Database is present for useful completed-with-issues results", () => {
+  const job = { id: 1, jobId: "job", kind: "file", status: "partial", totalPeople: 2,
+    counts: { completed: 1, failed: 1 }, results: { people: [personWithCountry()] } };
+  const html = render("Results", { job, regionRef: { current: null } });
+  assert.match(html, /Save to Database/);
+  assert.match(html, /Completed with Issues/);
+  assert.doesNotMatch(render("Results", { job: { ...job, results: null }, regionRef: { current: null } }), /Save to Database/);
+});
+
+test("failed and cancelled supplied-only profiles preserve outcome without inventing review or completion", () => {
+  for (const status of ["failed", "cancelled"]) {
+    const person = { person_id: "seed", row_index: 1, status, result: null, original_row: {},
+      supplied_fields: { full_name: { value: "Anna Example", confidence: 0, research_confidence: 0,
+        provenance_status: "supplied", input_confidence: 100, review_required: false } } };
+    const html = render("Results", { job: { id: "seed", jobId: "job", kind: "person", status,
+      results: { people: [person] } }, regionRef: { current: null } });
+    assert.match(html, new RegExp(`Research ${status}; supplied information retained`));
+    assert.doesNotMatch(html, /Review recommended|Research complete|Save to Database/);
+  }
+});
+
+test("historical professional context is visible in field details and never labeled current", () => {
+  const person = personWithCountry();
+  person.result.profile.fields.organisation = { value: "Established Practice", confidence: 91, review_required: true,
+    review_reason_codes: ["HISTORICAL_PROFESSIONAL_AFFILIATION"], scoring_components: {
+      relationship_temporal_status: "historical", relationship_type: "principal_professional_practice",
+    } };
+  const drawer = render("EvidenceDrawer", { selection: { field: "organisation", person, request } });
+  assert.match(drawer, /Principal professional practice · Historical/);
+  assert.doesNotMatch(drawer, /· Current/);
+});
+
+test("canonical API display casing agrees across table, card and details without changing raw input", () => {
+  for (const value of ["IBM", "UNESCO", "McGill", "PwC", "ETH Zürich", "RPBW", "University of Ghana", "Universidade de São Paulo"]) {
+    const person = personWithCountry();
+    person.result.profile.fields.organisation = { value, confidence: 87, review_required: false };
+    const card = render("FieldCard", { field: "organisation", label: "Organisation", person, request });
+    const table = render("BatchTable", { job: { status: "completed", results: { people: [person] } } });
+    const drawer = render("EvidenceDrawer", { selection: { field: "organisation", person, request } });
+    for (const html of [card, table, drawer]) assert.ok(html.includes(value));
+  }
 });

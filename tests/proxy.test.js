@@ -60,6 +60,7 @@ describe("KnownBy development proxy guard", () => {
       request("/v1/jobs/job-1/library", "POST"),
       request("/v1/library/files?limit=50&offset=0", "GET"),
       request("/v1/library/files/file-1", "GET"),
+      request("/v1/library/files/file-1/records?limit=50&offset=0&q=artist", "GET"),
       request("/api/v1/library/files/file-1", "DELETE"),
     ];
     const blocked = [
@@ -70,6 +71,7 @@ describe("KnownBy development proxy guard", () => {
       request("/v1/jobs/job-1/library", "GET"),
       request("/v1/library/files", "POST"),
       request("/v1/library/files/file-1", "POST"),
+      request("/v1/library/files/file-1/records", "POST"),
     ];
 
     assert.equal(allowed.every(isAllowedProxyRoute), true);

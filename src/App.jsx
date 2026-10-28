@@ -25,7 +25,8 @@ import {
   saveJobToLibrary,
 } from "./api.js";
 import { fields } from "./data.js";
-import { formatInputValue, formatLibraryError, formatScoringValue, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary } from "./presentation.js";
+import { canSaveJob, fetchTerminalResults, resultState } from "./results-state.js";
+import { formatInputValue, formatLibraryError, formatScoringValue, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary, getPersonProfile, getRelationshipLabel } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import SharedLibrary from "./SharedLibrary.jsx";
@@ -42,6 +43,7 @@ const sectionFromHash = () => {
 const activeStatuses = new Set(["submitting", "queued", "running"]);
 const terminalStatuses = new Set([
   "completed",
+  "completed_with_issues",
   "partial",
   "failed",
   "cancelled",
@@ -93,20 +95,20 @@ function Skeleton({ className = "" }) {
   return <span aria-hidden="true" className={`skeleton ${className}`} />;
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, label }) {
   const safeStatus = status || "queued";
   return (
     <span className={`status-badge ${safeStatus}`}>
       {["completed", "review_required"].includes(safeStatus) ? (
         <CheckCircle2 size={13} />
-      ) : ["failed", "partial"].includes(safeStatus) ? (
+      ) : ["failed", "partial", "completed_with_issues"].includes(safeStatus) ? (
         <AlertCircle size={13} />
       ) : activeStatuses.has(safeStatus) || safeStatus === "researching" ? (
         <RefreshCw className="spin" size={13} />
       ) : (
         <Clock3 size={13} />
       )}
-      {titleCase(safeStatus)}
+      <span className="status-badge-label">{label || titleCase(safeStatus)}</span>
     </span>
   );
 }
@@ -115,7 +117,7 @@ function EvidenceDrawer({ selection, onClose }) {
   const dialog = useRef(null);
   const { field, person, request, row } = selection;
   const result = person?.result;
-  const profile = result?.profile;
+  const profile = getPersonProfile(person);
   const decision = profile?.fields?.[field];
   const label = fieldLabel(field);
   const confidence = getFieldConfidence(decision);
@@ -259,6 +261,17 @@ function EvidenceDrawer({ selection, onClose }) {
         )}
 
         {provenanceLabel && <p className="claim-meta">{provenanceLabel}</p>}
+        {getRelationshipLabel(decision) && <p className="relationship-context">{getRelationshipLabel(decision)}</p>}
+
+        {profile?.saved_row_sources?.length > 0 && !decision?.sources?.length && (
+          <section className="claim-section">
+            <h3>Saved record sources</h3>
+            <p>These links were saved for the whole record. Support for this individual field is unavailable.</p>
+            <div className="source-list">{profile.saved_row_sources.map(safeHttpUrl).filter(Boolean).map((url) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer" className="source-link"><span>{url}</span><ExternalLink size={14} /></a>
+            ))}</div>
+          </section>
+        )}
 
         {!decision ? (
           <div className="evidence-empty">
@@ -609,7 +622,7 @@ function JobProgress({ job }) {
 }
 
 function ProfileSummary({ person }) {
-  const profile = person?.result?.profile;
+  const profile = getPersonProfile(person);
   const name = profile?.fields?.full_name?.value || profile?.input_name;
   return (
     <div className="profile-summary populated-summary">
@@ -619,7 +632,9 @@ function ProfileSummary({ person }) {
       <div className="summary-copy">
         <strong>{name || "Person result"}</strong>
         <span>
-          {profile?.review_required
+          {["failed", "cancelled"].includes(person?.status)
+            ? `Research ${person.status}${!person.result && person.supplied_fields ? "; supplied information retained" : ""}`
+            : profile?.review_required
             ? "Review recommended"
             : "Research complete"}
         </span>
@@ -644,7 +659,7 @@ function ProfileSummary({ person }) {
 }
 
 function FieldCard({ field, label, person, request, onSelect }) {
-  const decision = person?.result?.profile?.fields?.[field];
+  const decision = getPersonProfile(person)?.fields?.[field];
   const confidence = getFieldConfidence(decision);
   const provenanceLabel = getFieldProvenanceLabel(decision);
   const linkedSourceCount = unique(
@@ -723,7 +738,7 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
 
   if (
     !people.length &&
-    activeStatuses.has(job.status) &&
+    (activeStatuses.has(job.status) || resultState(job) === "loading") &&
     !job.monitoringStopped
   ) {
     const rows = Math.min(Math.max(job.totalPeople || 4, 1), 4);
@@ -764,6 +779,7 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
   }
 
   if (!people.length) {
+    if (resultState(job) === "error") return null;
     return (
       <div className="terminal-empty">
         <AlertCircle size={22} />
@@ -792,7 +808,7 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
           {people.map((person) => (
             <tr key={person.person_id || person.row_index}>
               {fields.map(([key, label]) => {
-                const decision = person.result?.profile?.fields?.[key];
+                const decision = getPersonProfile(person)?.fields?.[key];
                 const confidence = getFieldConfidence(decision);
                 const provenanceLabel = getFieldProvenanceLabel(decision);
                 const originalName =
@@ -839,6 +855,9 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
                         )}
                       </span>
                       {provenanceLabel && <span className="field-meta">{provenanceLabel}</span>}
+                      {key === "university_name" && getPersonProfile(person)?.record_status && (
+                        <span className="field-meta">Education record · {titleCase(getPersonProfile(person).record_status)}</span>
+                      )}
                     </button>
                   </td>
                 );
@@ -943,7 +962,7 @@ function Results({
               >
                 <ArrowDownToLine size={16} /> XLSX
               </button>
-              {job.status === "completed" && (
+              {canSaveJob(job) && (
                 <div className="library-save-controls">
                   <label className="sr-only" htmlFor="library-save-format">Library file type</label>
                   <select
@@ -962,7 +981,7 @@ function Results({
                     onClick={() => onSave(job, libraryFormat)}
                   >
                     {alreadySaved ? <CheckCircle2 size={17} /> : <DatabaseStackIcon size={17} />}
-                    {job.saving ? "Saving…" : alreadySaved ? "Saved to Library" : "Save to Library"}
+                    {job.saving ? "Saving…" : alreadySaved ? "Saved to Database" : "Save to Database"}
                   </button>
                 </div>
               )}
@@ -981,6 +1000,7 @@ function Results({
           <div className="results-status-row" aria-live="polite">
             <StatusBadge
               status={job.monitoringStopped ? "monitoring_stopped" : job.status}
+              label={job.status === "partial" && progress.finished === progress.total && progress.total > 0 ? "Completed with Issues" : undefined}
             />
             <span className="progress-stage">
               {job.monitoringStopped ? "Status checks paused" : progress.stage}
@@ -1031,8 +1051,14 @@ function Results({
             </p>
           )}
 
+          {!isActive && resultState(job) === "loading" && (
+            <p className="loading-status results-loading-note" role="status">
+              <RefreshCw className="spin" size={14} /> Loading completed results…
+            </p>
+          )}
+
           {job.kind === "person" ? (
-            person?.result ? (
+            (person?.result || person?.supplied_fields) ? (
               <>
                 <ProfileSummary person={person} />
                 <div className="profile-fields" aria-label="Research fields">
@@ -1048,9 +1074,9 @@ function Results({
                   ))}
                 </div>
               </>
-            ) : isActive ? (
+            ) : isActive || resultState(job) === "loading" ? (
               <PersonSkeleton />
-            ) : (
+            ) : resultState(job) === "error" ? null : (
               <div className="terminal-empty">
                 <AlertCircle size={22} />
                 <h3>
@@ -1099,6 +1125,10 @@ export default function App() {
   const pageGlass = useRef(null);
   const pendingSaves = useRef(new Set());
   const savedEntries = useRef(new Map());
+  const resultRequests = useRef(new Map());
+  useEffect(() => () => {
+    for (const request of resultRequests.current.values()) request.controller.abort();
+  }, []);
 
   useGlassSurface(headerGlass, { surfaceOpacity: 0.29, tintOpacity: 0.2 });
   useGlassSurface(personGlass, { surfaceOpacity: 0.32 });
@@ -1163,10 +1193,19 @@ export default function App() {
   }
 
   async function loadResults(job, signal) {
+    if (resultRequests.current.has(job.id)) return resultRequests.current.get(job.id).promise;
+    const controller = new AbortController();
+    if (signal?.aborted) return;
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    updateJob(job.id, { resultsState: "loading", error: null });
+    const promise = (async () => {
     try {
-      const response = await getJobResults(job.jobId, { signal });
+      const response = await fetchTerminalResults(job, getJobResults, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       updateJob(job.id, {
         results: response,
+        resultsState: response.people.length ? "ready" : "empty",
         status: response.status || job.status,
         error: null,
         pollError: null,
@@ -1176,9 +1215,16 @@ export default function App() {
         return;
       }
       updateJob(job.id, {
+        resultsState: "error",
         error: errorMessage(error, "Results could not be loaded."),
       });
+    } finally {
+      signal?.removeEventListener("abort", abort);
+      resultRequests.current.delete(job.id);
     }
+    })();
+    resultRequests.current.set(job.id, { controller, promise });
+    return promise;
   }
 
   useEffect(() => {
@@ -1210,9 +1256,10 @@ export default function App() {
           jobView: view,
           pollError: null,
           monitoringStopped: false,
+          ...(terminalStatuses.has(view.status) ? { resultsState: "loading" } : {}),
         });
         if (terminalStatuses.has(view.status)) {
-          await loadResults({ ...pollingJob, status: view.status });
+          await loadResults({ ...pollingJob, status: view.status, totalPeople: view.total_people });
           return;
         }
         timer = window.setTimeout(poll, 2500);
@@ -1384,7 +1431,7 @@ export default function App() {
   async function handleAddToDatabase(job, format) {
     const saveKey = `${job.jobId}:${format}`;
     if (
-      !job.jobId || job.status !== "completed" ||
+      !canSaveJob(job) ||
       pendingSaves.current.has(job.jobId) || savedEntries.current.has(saveKey)
     ) return;
 
@@ -1653,7 +1700,7 @@ export default function App() {
           </section>
         ) : (
           <div ref={pageGlass}>
-            <SharedLibrary onDelete={handleLibraryDelete} refreshToken={libraryRevision} />
+            <SharedLibrary onDelete={handleLibraryDelete} refreshToken={libraryRevision} renderRecords={(job) => <BatchTable job={job} onSelect={setSelection} />} />
           </div>
         )}
       </main>
@@ -1696,4 +1743,4 @@ export default function App() {
   );
 }
 
-export { BatchTable, EvidenceDrawer, FieldCard, PersonSkeleton };
+export { BatchTable, EvidenceDrawer, FieldCard, PersonSkeleton, Results, StatusBadge };
