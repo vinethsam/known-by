@@ -66,6 +66,8 @@ const savedFile = {
   research_started_at: "2026-09-29T02:41:00Z",
   size_bytes: 128,
   list_name: "Forbes 2000",
+  available_formats: ["csv", "xlsx"],
+  can_delete: false,
 };
 
 test("saved records use authenticated pagination and reject malformed or unauthorized responses", async () => {
@@ -264,13 +266,12 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       return jsonResponse(savedFile, { status: 201 });
     };
 
-    const result = await saveJobToLibrary("job/id", "csv", { signal });
+    const result = await saveJobToLibrary("job/id", { signal });
 
     assert.equal(request.url, "/api/v1/jobs/job%2Fid/library");
     assert.equal(request.init.method, "POST");
     assert.equal(request.init.signal, signal);
     assert.deepEqual(JSON.parse(request.init.body), {
-      format: "csv",
       provenance: "none",
     });
     assert.equal(result.filename, savedFile.filename);
@@ -305,15 +306,17 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     });
   });
 
-  test("Save to Library defaults to XLSX and reports a rejected save", async () => {
+  test("Save to Database requires both formats and reports rejected or incomplete saves", async () => {
     let request;
     globalThis.fetch = async (url, init) => {
       request = { url, init };
       return jsonResponse({ ...savedFile, format: "xlsx", filename: "KnownBy_2026-10-22_1200.xlsx" }, { status: 201 });
     };
     const saved = await saveJobToLibrary("completed-job");
-    assert.deepEqual(JSON.parse(request.init.body), { format: "xlsx", provenance: "none" });
+    assert.deepEqual(JSON.parse(request.init.body), { provenance: "none" });
     assert.equal(saved.format, "xlsx");
+    globalThis.fetch = async () => jsonResponse({ ...savedFile, available_formats: ["csv"] }, { status: 201 });
+    await assert.rejects(saveJobToLibrary("incomplete-job"), { code: "MALFORMED_RESPONSE" });
 
     globalThis.fetch = async () => jsonResponse({ detail: "Only completed jobs can be saved" }, { status: 409 });
     await assert.rejects(saveJobToLibrary("unfinished-job"), {
@@ -333,7 +336,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       return jsonResponse(init.method === "POST" ? files[0] : files);
     };
     assert.deepEqual(await listLibraryFiles(), files);
-    assert.deepEqual(await saveJobToLibrary("test-job", "csv"), files[0]);
+    assert.deepEqual(await saveJobToLibrary("test-job"), files[0]);
     for (const { init } of requests) {
       assert.equal(init.credentials, "same-origin");
       assert.equal(init.cache, "no-store");
@@ -342,7 +345,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
 
     globalThis.fetch = async () => jsonResponse({ detail: "Unauthorized" }, { status: 401 });
     await assert.rejects(listLibraryFiles(), { status: 401 });
-    await assert.rejects(saveJobToLibrary("test-job", "xlsx"), { status: 401 });
+    await assert.rejects(saveJobToLibrary("test-job"), { status: 401 });
     await assert.rejects(downloadLibraryFile(savedFile), { status: 401 });
     await assert.rejects(deleteLibraryFile(savedFile.file_id), { status: 401 });
   });
@@ -475,6 +478,9 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     assert.equal(state.downloadedAs, savedFile.filename);
     assert.equal(result.filename, savedFile.filename);
     assert.equal(result.filename.includes(savedFile.file_id), false);
+    const alternate = await downloadLibraryFile(savedFile, { format: "xlsx" });
+    assert.equal(requestUrl, "/api/v1/library/files/file%2Fid?format=xlsx");
+    assert.equal(alternate.filename, savedFile.filename.replace(/\.csv$/, ".xlsx"));
   });
 
   test("normal export fallback filenames never reveal the job ID", async () => {

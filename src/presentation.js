@@ -11,6 +11,7 @@ const provenanceLabels = {
   corroborated: "Supplied input corroborated by research",
   conflicting: "Supplied input conflicts with research",
   superseded: "Supplied input superseded by research",
+  mixed: "Combined qualifications with different provenance; inspect supplied information",
 };
 
 export function getPersonProfile(person) {

@@ -21,7 +21,7 @@ PORT = 5197
 ORIGIN = f"http://127.0.0.1:{PORT}"
 FIELDS = ["full_name", "country_of_origin", "organisation", "job_title", "university_name", "degree_type", "subject", "profile_link"]
 VALUES = ["Anna María McGill", "Ghana", "UNESCO", "Senior Research Analyst", "University of Ghana", "PhD", "Architecture", "https://example.org/a-very-long-biography-and-research-profile/anna-maria-mcgill"]
-saved = {"file_id": "fixture-file", "filename": "Research_2026-10-26.csv", "format": "csv", "saved_at": "2026-10-26T12:00:00Z", "research_started_at": "2026-10-26T11:59:00Z", "size_bytes": 128, "saved_by": "QA User"}
+saved = {"file_id": "fixture-file", "filename": "Research_2026-10-26.xlsx", "format": "xlsx", "available_formats": ["csv", "xlsx"], "can_delete": True, "saved_at": "2026-10-26T12:00:00Z", "research_started_at": "2026-10-26T11:59:00Z", "size_bytes": 128, "saved_by": "QA User"}
 
 def decision(value, field):
     return dict(value=value, confidence=42 if field == "organisation" else 87, research_confidence=42 if field == "organisation" else 87,
@@ -53,7 +53,7 @@ def run():
             executable = os.environ.get("KNOWNBY_TEST_BROWSER", r"C:\Program Files\Google\Chrome\Application\chrome.exe")
             browser = p.chromium.launch(executable_path=executable, headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
-            state = {"results": 0, "saves": 0, "deletes": 0, "files": [], "previews": [], "denied": False}
+            state = {"results": 0, "saves": 0, "deletes": 0, "files": [], "previews": [], "downloads": [], "denied": False}
             def route(request):
                 url = urlsplit(request.request.url)
                 path = url.path
@@ -80,7 +80,9 @@ def run():
                 if path.endswith("/fixture-file") and request.request.method == "DELETE":
                     state["deletes"] += 1; state["files"] = []; request.fulfill(status=204); return
                 if path.endswith("/fixture-file"):
-                    request.fulfill(status=200, content_type="text/csv", headers={"Content-Disposition": 'attachment; filename="Research_2026-10-26.csv"'}, body="Full Name\nAnna María McGill\n"); return
+                    format = parse_qs(url.query).get("format", ["xlsx"])[0]
+                    state["downloads"].append(format)
+                    request.fulfill(status=200, content_type="text/csv" if format == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="Research_2026-10-26.{format}"'}, body="Full Name\nAnna María McGill\n"); return
                 raise AssertionError(f"Unexpected API request: {path}")
             context.route("**/*", route)
             page = context.new_page()
@@ -99,14 +101,30 @@ def run():
             assert dimensions["display"] == "inline-flex" and dimensions["delta"] < 2 and dimensions["height"] < 30 and not dimensions["overflow"], dimensions
             page.screenshot(path=str(OUT / "desktop-field-details.png"), full_page=True)
             page.get_by_label("Close field details").click()
-            page.get_by_label("Library file type").select_option("csv")
+            assert page.get_by_label("Library file type").count() == 0
             page.get_by_role("button", name="Save to Database", exact=True).click()
             expect(page.get_by_role("button", name="Saved to Database", exact=True)).to_be_disabled()
             assert state["saves"] == 1
             page.get_by_label("Dismiss save confirmation").click()
             page.get_by_role("button", name="Database", exact=True).click()
-            page.get_by_role("button", name="View records", exact=True).click()
+            view = page.get_by_role("button", name=f"View Records for {saved['filename']}", exact=True)
+            expect(view).to_be_visible()
+            assert page.locator(".shared-library__table tbody tr button").count() == 2
+            view.hover()
+            expect(page.get_by_role("tooltip")).to_have_text("View Records")
+            for format in ("csv", "xlsx"):
+                page.get_by_role("button", name=f"Actions for {saved['filename']}", exact=True).click()
+                menu = page.get_by_role("menu")
+                assert menu.evaluate("e=>e.parentElement===document.body")
+                assert menu.evaluate("e=>{let r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight}")
+                if format == "csv": page.screenshot(path=str(OUT / "desktop-database-actions.png"), full_page=False)
+                with page.expect_download() as download:
+                    page.get_by_role("menuitem", name=f"Download {format.upper()}", exact=True).click()
+                assert download.value.suggested_filename == f"Research_2026-10-26.{format}"
+            assert state["downloads"] == ["csv", "xlsx"]
+            view.click()
             expect(page.get_by_text("1–50 of 51 records", exact=True)).to_be_visible()
+            assert page.get_by_role("button", name="Delete saved file", exact=True).count() == 0
             assert len(page.locator(".file-results tbody tr").all()) == 50
             page.get_by_role("button", name="Next", exact=True).click()
             expect(page.get_by_text("51–51 of 51 records", exact=True)).to_be_visible()
@@ -131,16 +149,27 @@ def run():
                 page.get_by_role("button", name="Download original", exact=True).click()
             assert download.value.suggested_filename == saved["filename"]
             page.get_by_role("button", name="Back to files", exact=True).click()
-            expect(page.get_by_role("button", name=saved["filename"], exact=True)).to_be_visible()
-            page.get_by_role("button", name="Delete", exact=True).click()
-            expect(page.get_by_text("Delete this saved result?", exact=True)).to_be_visible()
+            expect(page.get_by_text(saved["filename"], exact=True)).to_be_visible()
+            state["files"] = [{**saved, "can_delete": False}]
+            page.reload()
+            page.get_by_role("button", name=f"Actions for {saved['filename']}", exact=True).click()
+            assert page.get_by_role("menuitem", name="Delete", exact=True).count() == 0
+            assert page.get_by_role("menu").evaluate("e=>{let r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight}")
+            page.screenshot(path=str(OUT / "mobile-database-actions.png"), full_page=False)
+            page.keyboard.press("Escape")
+            state["files"] = [saved]
+            page.reload()
+            page.get_by_role("button", name=f"Actions for {saved['filename']}", exact=True).click()
+            page.get_by_role("menuitem", name="Delete", exact=True).click()
+            expect(page.get_by_role("dialog").get_by_text(saved["filename"], exact=True)).to_be_visible()
+            assert state["deletes"] == 0
             page.get_by_role("button", name="Delete", exact=True).click()
             expect(page.get_by_text("No saved research yet", exact=True)).to_be_visible()
             assert state["deletes"] == 1
             state["denied"] = True
             page.reload()
             expect(page.get_by_text("Shared Library access requires authorization. Contact your administrator.", exact=True)).to_be_visible()
-            print(json.dumps({"passed": True, "result_fetches": state["results"], "save_requests": state["saves"], "delete_requests": state["deletes"], "preview_requests": state["previews"], "badge": dimensions, "screenshots": str(OUT)}, indent=2))
+            print(json.dumps({"passed": True, "result_fetches": state["results"], "save_requests": state["saves"], "delete_requests": state["deletes"], "download_formats": state["downloads"], "preview_requests": state["previews"], "badge": dimensions, "screenshots": str(OUT)}, indent=2))
             browser.close()
     finally:
         server.terminate()

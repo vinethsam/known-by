@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   ArrowDownToLine,
   ArrowLeft,
-  Eye,
+  Info,
+  MoreVertical,
   FileSpreadsheet,
   RefreshCw,
   Trash2,
@@ -39,6 +41,105 @@ function displaySize(value) {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
+function savedFormats(file) {
+  return file.available_formats?.length ? file.available_formats : [file.format];
+}
+
+function FileActions({ file, busy, onView, onDownload, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const [tooltip, setTooltip] = useState(null);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const trigger = useRef(null);
+  const menu = useRef(null);
+  const menuId = `file-actions-${file.file_id}`;
+
+  useLayoutEffect(() => {
+    if (!open || !menu.current) return undefined;
+    const anchor = trigger.current.getBoundingClientRect();
+    const bounds = menu.current.getBoundingClientRect();
+    setPosition({
+      left: Math.max(8, Math.min(anchor.right - bounds.width, window.innerWidth - bounds.width - 8)),
+      top: anchor.bottom + bounds.height + 8 <= window.innerHeight
+        ? anchor.bottom + 6 : Math.max(8, anchor.top - bounds.height - 6),
+    });
+    menu.current.querySelector('button:not(:disabled)')?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open && !tooltip) return undefined;
+    const close = () => { setOpen(false); setTooltip(null); };
+    const outside = (event) => {
+      if (!menu.current?.contains(event.target) && !trigger.current?.contains(event.target)) close();
+    };
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      document.removeEventListener("pointerdown", outside);
+    };
+  }, [open, tooltip]);
+
+  function showTooltip(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTooltip({ left: Math.max(8, Math.min(rect.left + rect.width / 2 - 51, window.innerWidth - 110)),
+      top: rect.top > 42 ? rect.top - 36 : rect.bottom + 7 });
+  }
+
+  function menuKeyDown(event) {
+    if (event.key === "Escape" || event.key === "Tab") {
+      if (event.key === "Escape") event.preventDefault();
+      setOpen(false);
+      trigger.current?.focus();
+      return;
+    }
+    const items = [...menu.current.querySelectorAll('button:not(:disabled)')];
+    const index = items.indexOf(document.activeElement);
+    const next = { ArrowDown: (index + 1) % items.length, ArrowUp: (index - 1 + items.length) % items.length,
+      Home: 0, End: items.length - 1 }[event.key];
+    if (next !== undefined) { event.preventDefault(); items[next]?.focus(); }
+  }
+
+  return <div className="shared-library__actions">
+    <button type="button" className="icon-button shared-library__action-icon" aria-label={`View Records for ${file.filename}`}
+      onMouseEnter={showTooltip} onMouseLeave={() => setTooltip(null)} onFocus={showTooltip} onBlur={() => setTooltip(null)}
+      onClick={() => { setTooltip(null); onView(file); }}><Info size={18} /></button>
+    <button ref={trigger} type="button" className="icon-button shared-library__action-icon" aria-label={`Actions for ${file.filename}`}
+      aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={busy}
+      onClick={() => { setTooltip(null); setOpen((value) => !value); }}><MoreVertical size={18} /></button>
+    {tooltip && createPortal(<span role="tooltip" className="library-action-tooltip" style={tooltip}>View Records</span>, document.body)}
+    {open && createPortal(<div ref={menu} id={menuId} role="menu" aria-label={`Actions for ${file.filename}`}
+      className="library-action-menu" style={position} onKeyDown={menuKeyDown}>
+      {["csv", "xlsx"].map((format) => <button key={format} type="button" role="menuitem"
+        disabled={!savedFormats(file).includes(format)} title={!savedFormats(file).includes(format) ? "Not stored in this older entry" : undefined}
+        onClick={() => { setOpen(false); trigger.current?.focus(); onDownload(file, format); }}>
+        <ArrowDownToLine size={16} /> Download {format.toUpperCase()}
+      </button>)}
+      {file.can_delete === true && <button type="button" role="menuitem" className="library-action-menu__delete"
+        onClick={() => { setOpen(false); trigger.current?.focus(); onDelete(file); }}><Trash2 size={16} /> Delete</button>}
+    </div>, document.body)}
+  </div>;
+}
+
+function DeleteConfirmation({ file, deleting, error, onClose, onConfirm }) {
+  const dialog = useRef(null);
+  useEffect(() => {
+    const trigger = document.activeElement;
+    const element = dialog.current;
+    element.showModal();
+    return () => { element.close(); trigger?.focus(); };
+  }, []);
+  return createPortal(<dialog ref={dialog} className="library-delete-dialog" aria-labelledby="library-delete-title"
+    onCancel={(event) => { event.preventDefault(); if (!deleting) onClose(); }}>
+    <h3 id="library-delete-title">Delete saved result?</h3>
+    <p>This will delete <strong>{file.filename}</strong> and its saved formats from the shared Database.</p>
+    {error && <p className="library-delete-dialog__error" role="alert">{error}</p>}
+    <div><button type="button" className="secondary" autoFocus disabled={deleting} onClick={onClose}>Cancel</button>
+      <button type="button" className="secondary shared-library__danger-button" disabled={deleting} onClick={() => onConfirm(file)}>{deleting ? "Deleting…" : "Delete"}</button></div>
+  </dialog>, document.body);
+}
+
 export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecords }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +148,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [downloading, setDownloading] = useState("");
-  const [deleteCandidate, setDeleteCandidate] = useState("");
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleting, setDeleting] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [announcement, setAnnouncement] = useState("");
@@ -164,13 +265,13 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
     }
   }
 
-  async function handleDownload(file) {
+  async function handleDownload(file, format = file.format) {
     if (downloading) return;
     setDownloading(file.file_id);
     setActionError("");
     setAnnouncement("");
     try {
-      const result = await downloadLibraryFile(file);
+      const result = await downloadLibraryFile(file, { format });
       setAnnouncement(`Downloaded ${result?.filename || file.filename}.`);
     } catch (error) {
       setActionError(
@@ -182,7 +283,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
   }
 
   async function handleDelete(file) {
-    if (deleting) return;
+    if (deleting || file.can_delete !== true) return;
     setDeleting(file.file_id);
     setActionError("");
     setAnnouncement("");
@@ -191,7 +292,7 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
       setFiles((items) =>
         items.filter((item) => item.file_id !== file.file_id),
       );
-      setDeleteCandidate("");
+      setDeleteCandidate(null);
       if (selectedFile?.file_id === file.file_id) setSelectedFile(null);
       setAnnouncement(`Deleted ${file.filename} from Shared Library.`);
       onDelete?.(file.file_id);
@@ -230,13 +331,6 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
             <button className="secondary" disabled={!recordPage.has_more} onClick={() => setRecordOffset(recordOffset + PAGE_SIZE)}>Next</button>
           </nav>
         </> : <div className="shared-library__state"><h3>{recordQuery ? "No matching records" : "No saved records"}</h3><p>{recordQuery ? "Try another search." : "This file does not contain research rows."}</p></div>}
-      <div className="library-preview__toolbar">
-        {deleteCandidate === selectedFile.file_id ? <div className="shared-library__delete-confirmation" role="group" aria-label={`Delete ${selectedFile.filename}`}>
-          <span>Delete this saved result?</span>
-          <button className="secondary" disabled={Boolean(deleting)} onClick={() => setDeleteCandidate("")}>Cancel</button>
-          <button className="secondary shared-library__danger-button" disabled={Boolean(deleting)} onClick={() => handleDelete(selectedFile)}>{deleting ? "Deleting…" : "Delete"}</button>
-        </div> : <button className="secondary" onClick={() => setDeleteCandidate(selectedFile.file_id)}><Trash2 size={15} /> Delete saved file</button>}
-      </div>
     </section>
   );
 
@@ -313,18 +407,15 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
             </thead>
             <tbody>
               {files.map((file) => {
-                const isDownloading = downloading === file.file_id;
-                const isConfirming = deleteCandidate === file.file_id;
-                const isDeleting = deleting === file.file_id;
                 return (
                   <tr key={file.file_id}>
                     <td className="shared-library__file-cell" data-label="File name">
                       <span className="shared-library__file-name">
                         <FileSpreadsheet size={19} />
                         <span className="shared-library__file-details">
-                          <button type="button" className="text-button shared-library__open-file" onClick={() => openFile(file)} title={file.filename}>{file.filename}</button>
+                          <strong title={file.filename}>{file.filename}</strong>
                           <span className="shared-library__file-metadata">
-                            <span>{String(file.format || "").toUpperCase() || "—"}</span>
+                            <span>{savedFormats(file).map((format) => format.toUpperCase()).join(" + ")}</span>
                             <span aria-hidden="true">·</span>
                             <span>{displaySize(file.size_bytes)}</span>
                           </span>
@@ -345,57 +436,8 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
                       )}
                     </td>
                     <td data-label="Actions" className="shared-library__actions-cell">
-                      {isConfirming ? (
-                        <div
-                          className="shared-library__delete-confirmation"
-                          role="group"
-                          aria-label={`Delete ${file.filename}`}
-                        >
-                          <span>Delete this saved result?</span>
-                          <button
-                            type="button"
-                            className="secondary shared-library__compact-button"
-                            autoFocus
-                            disabled={isDeleting}
-                            onClick={() => setDeleteCandidate("")}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary shared-library__compact-button shared-library__danger-button"
-                            disabled={isDeleting}
-                            onClick={() => handleDelete(file)}
-                          >
-                            {isDeleting ? "Deleting…" : "Delete"}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="shared-library__actions">
-                          <button type="button" className="secondary shared-library__compact-button" onClick={() => openFile(file)}><Eye size={15} /> View records</button>
-                          <button
-                            type="button"
-                            className="secondary shared-library__compact-button"
-                            disabled={Boolean(downloading) || Boolean(deleting)}
-                            onClick={() => handleDownload(file)}
-                          >
-                            {isDownloading ? (
-                              <RefreshCw className="spin" size={15} />
-                            ) : (
-                              <ArrowDownToLine size={15} />
-                            )}
-                            {isDownloading ? "Downloading…" : "Download"}
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary shared-library__compact-button"
-                            disabled={Boolean(downloading) || Boolean(deleting)}
-                            onClick={() => setDeleteCandidate(file.file_id)}
-                          >
-                            <Trash2 size={15} /> Delete
-                          </button>
-                        </div>
-                      )}
+                      <FileActions file={file} busy={Boolean(downloading) || Boolean(deleting)} onView={openFile} onDownload={handleDownload}
+                        onDelete={(candidate) => { setActionError(""); setDeleteCandidate(candidate); }} />
                     </td>
                   </tr>
                 );
@@ -417,6 +459,8 @@ export default function SharedLibrary({ onDelete, refreshToken = 0, renderRecord
           )}
         </div>
       )}
+      {deleteCandidate && <DeleteConfirmation file={deleteCandidate} deleting={Boolean(deleting)} error={actionError}
+        onClose={() => setDeleteCandidate(null)} onConfirm={handleDelete} />}
     </section>
   );
 }

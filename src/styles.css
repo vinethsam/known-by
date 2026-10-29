@@ -730,20 +730,6 @@ input:disabled {
   gap: 6px;
   min-width: 0;
 }
-.library-save-controls select {
-  min-height: 38px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  background: var(--input);
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-.library-save-controls select:hover:not(:disabled) {
-  border-color: #a5b5fb43;
-  color: var(--text);
-}
 .loading-status {
   display: inline-flex;
   align-items: center;
@@ -1458,6 +1444,7 @@ input:disabled {
   text-transform: uppercase;
 }
 .field-value {
+  white-space: pre-line;
   display: block;
   margin-top: 8px;
   color: #e5e8f3;

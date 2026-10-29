@@ -490,7 +490,7 @@ function Upload({ file, onFile, onRemove, onStart, busy, actionRef }) {
         <span className="format-label">CSV / XLSX</span>
       </div>
       <p className="workflow-description">
-        Upload a CSV or XLSX containing people. Additional professional and
+        Upload a CSV or XLSX containing up to 500 people. Additional professional and
         education columns are retained as supplied context.
       </p>
       <input
@@ -881,7 +881,6 @@ function Results({
   onSelect,
   regionRef,
 }) {
-  const [libraryFormat, setLibraryFormat] = useState("xlsx");
   useGlassSurface(regionRef, {
     enabled: job?.kind !== "file",
     refreshKey: `${job?.id ?? "idle"}:${Boolean(job?.results)}`,
@@ -904,7 +903,7 @@ function Results({
   const person = job?.results?.people?.[0];
   const hasResults = Boolean(job?.results);
   const progress = job ? getJobProgress(job) : null;
-  const alreadySaved = Boolean(job?.savedEntries?.[libraryFormat]);
+  const alreadySaved = Boolean(job?.savedEntries?.both);
 
   return (
     <section
@@ -964,21 +963,11 @@ function Results({
               </button>
               {canSaveJob(job) && (
                 <div className="library-save-controls">
-                  <label className="sr-only" htmlFor="library-save-format">Library file type</label>
-                  <select
-                    id="library-save-format"
-                    value={libraryFormat}
-                    disabled={Boolean(job.saving)}
-                    onChange={(event) => setLibraryFormat(event.target.value)}
-                  >
-                    <option value="xlsx">XLSX</option>
-                    <option value="csv">CSV</option>
-                  </select>
                   <button
                     type="button"
                     className="secondary add-database-action"
                     disabled={Boolean(job.saving) || alreadySaved}
-                    onClick={() => onSave(job, libraryFormat)}
+                    onClick={() => onSave(job)}
                   >
                     {alreadySaved ? <CheckCircle2 size={17} /> : <DatabaseStackIcon size={17} />}
                     {job.saving ? "Saving…" : alreadySaved ? "Saved to Database" : "Save to Database"}
@@ -1428,8 +1417,8 @@ export default function App() {
     }
   }
 
-  async function handleAddToDatabase(job, format) {
-    const saveKey = `${job.jobId}:${format}`;
+  async function handleAddToDatabase(job) {
+    const saveKey = `${job.jobId}:both`;
     if (
       !canSaveJob(job) ||
       pendingSaves.current.has(job.jobId) || savedEntries.current.has(saveKey)
@@ -1438,11 +1427,11 @@ export default function App() {
     pendingSaves.current.add(job.jobId);
     updateJob(job.id, { saving: true, saveError: null });
     try {
-      const saved = await saveJobToLibrary(job.jobId, format);
+      const saved = await saveJobToLibrary(job.jobId);
       savedEntries.current.set(saveKey, saved);
       updateJob(job.id, (current) => ({
         saving: false,
-        savedEntries: { ...current.savedEntries, [format]: saved },
+        savedEntries: { ...current.savedEntries, both: saved },
       }));
       setLibraryRevision((value) => value + 1);
       setSaveNotice(saved);

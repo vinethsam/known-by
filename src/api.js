@@ -360,6 +360,9 @@ function isSavedResultFile(value) {
     value.research_started_at.trim().length > 0 &&
     Number.isInteger(value.size_bytes) &&
     value.size_bytes >= 0 &&
+    (value.available_formats === undefined || (Array.isArray(value.available_formats) &&
+      value.available_formats.length > 0 && value.available_formats.every((format) => EXPORT_FORMATS.has(format)))) &&
+    (value.can_delete === undefined || typeof value.can_delete === "boolean") &&
     (value.list_name === undefined ||
       value.list_name === null ||
       typeof value.list_name === "string")
@@ -458,13 +461,8 @@ export function cancelJob(jobId, options = {}) {
   );
 }
 
-export function saveJobToLibrary(jobId, format = "xlsx", options = {}) {
+export function saveJobToLibrary(jobId, options = {}) {
   const provenance = options.provenance ?? "none";
-  if (!EXPORT_FORMATS.has(format)) {
-    throw new ApiError("Library format must be csv or xlsx.", {
-      code: "INVALID_EXPORT_FORMAT",
-    });
-  }
   if (!PROVENANCE_MODES.has(provenance)) {
     throw new ApiError("Library provenance must be none or field.", {
       code: "INVALID_PROVENANCE_MODE",
@@ -475,10 +473,10 @@ export function saveJobToLibrary(jobId, format = "xlsx", options = {}) {
     requestJson(pathForJob(jobId, "/library"), {
       method: "POST",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ format, provenance }),
+      body: JSON.stringify({ provenance }),
       signal: options.signal,
     }),
-    isSavedResultFile,
+    (value) => isSavedResultFile(value) && ["csv", "xlsx"].every((format) => value.available_formats?.includes(format)),
     "saved file",
   );
 }
@@ -658,14 +656,15 @@ export async function downloadLibraryFile(file, options = {}) {
   }
 
   const fileId = metadata?.file_id ?? file;
-  const format = metadata?.format ?? options.format ?? "xlsx";
+  const format = options.format ?? metadata?.format ?? "xlsx";
   if (!EXPORT_FORMATS.has(format)) {
     throw new ApiError("Library format must be csv or xlsx.", {
       code: "INVALID_EXPORT_FORMAT",
     });
   }
 
-  const response = await fetchFromApi(pathForLibraryFile(fileId), {
+  const path = pathForLibraryFile(fileId) + (options.format ? `?format=${format}` : "");
+  const response = await fetchFromApi(path, {
     headers: {
       Accept:
         format === "csv"
@@ -690,7 +689,7 @@ export async function downloadLibraryFile(file, options = {}) {
 
   return triggerBlobDownload(
     response,
-    metadata?.filename ?? options.filename ?? `KnownBy-export.${format}`,
+    metadata?.filename?.replace(/\.(csv|xlsx)$/i, `.${format}`) ?? options.filename ?? `KnownBy-export.${format}`,
     format,
   );
 }
