@@ -34,6 +34,7 @@ export class ApiError extends Error {
     this.statusText = options.statusText ?? "";
     this.code = options.code ?? "API_ERROR";
     this.details = options.details ?? null;
+    this.retryAfterMs = options.retryAfterMs ?? 0;
   }
 }
 
@@ -159,6 +160,7 @@ async function requestJson(path, init = {}) {
       statusText: response.statusText,
       code: errorCode(parsed.payload, response.status),
       details: parsed.payload,
+      retryAfterMs: retryAfterMs(response),
     });
   }
 
@@ -172,6 +174,34 @@ async function requestJson(path, init = {}) {
   }
 
   return parsed.payload;
+}
+
+function retryAfterMs(response) {
+  const value = response.headers.get("Retry-After");
+  if (!value) return 0;
+  const seconds = Number(value);
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+  return Number.isFinite(delay) ? Math.min(2_147_483_647, Math.max(0, delay)) : 0;
+}
+
+// Only idempotent status/result reads time out and recover automatically. Job
+// submission, cancellation and saved-file mutations are never repeated here.
+async function readJobJson(path, options) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 30_000);
+  try {
+    return await requestJson(path, { headers: { Accept: "application/json" }, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw new ApiError("The research service took too long to respond.", { code: "READ_TIMEOUT" });
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+  }
 }
 
 async function requestNoContent(path, init = {}) {
@@ -221,7 +251,10 @@ function isJobViewPayload(value) {
     Object.values(value.counts).every(
       (count) => Number.isInteger(count) && count >= 0,
     ) &&
-    typeof value.created_at === "string"
+    typeof value.created_at === "string" &&
+    (value.recovery_state == null || ["reconnecting", "resuming"].includes(value.recovery_state)) &&
+    (value.recovery_reason == null || typeof value.recovery_reason === "string") &&
+    (value.retry_at == null || typeof value.retry_at === "string")
   );
 }
 
@@ -429,10 +462,7 @@ export function researchBatch(file, options = {}) {
 
 export function getJob(jobId, options = {}) {
   return validateResponse(
-    requestJson(pathForJob(jobId), {
-      headers: { Accept: "application/json" },
-      signal: options.signal,
-    }),
+    readJobJson(pathForJob(jobId), options),
     isJobViewPayload,
     "job status",
   );
@@ -440,10 +470,7 @@ export function getJob(jobId, options = {}) {
 
 export function getJobResults(jobId, options = {}) {
   return validateResponse(
-    requestJson(pathForJob(jobId, "/results"), {
-      headers: { Accept: "application/json" },
-      signal: options.signal,
-    }),
+    readJobJson(pathForJob(jobId, "/results"), options),
     isJobResultsPayload,
     "job results",
   );

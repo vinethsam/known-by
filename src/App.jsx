@@ -25,8 +25,8 @@ import {
   saveJobToLibrary,
 } from "./api.js";
 import { fields } from "./data.js";
-import { canSaveJob, fetchTerminalResults, resultState } from "./results-state.js";
-import { formatInputValue, formatLibraryError, formatScoringValue, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary, getPersonProfile, getRelationshipLabel } from "./presentation.js";
+import { canSaveJob, fetchTerminalResults, isTransientReadError, recoveryDelay, resultState } from "./results-state.js";
+import { formatInputValue, formatLibraryError, formatScoringValue, getConnectionState, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary, getPersonProfile, getRelationshipLabel } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import SharedLibrary from "./SharedLibrary.jsx";
@@ -103,7 +103,7 @@ function StatusBadge({ status, label }) {
         <CheckCircle2 size={13} />
       ) : ["failed", "partial", "completed_with_issues"].includes(safeStatus) ? (
         <AlertCircle size={13} />
-      ) : activeStatuses.has(safeStatus) || safeStatus === "researching" ? (
+      ) : activeStatuses.has(safeStatus) || ["researching", "reconnecting", "resuming"].includes(safeStatus) ? (
         <RefreshCw className="spin" size={13} />
       ) : (
         <Clock3 size={13} />
@@ -903,6 +903,7 @@ function Results({
   const person = job?.results?.people?.[0];
   const hasResults = Boolean(job?.results);
   const progress = job ? getJobProgress(job) : null;
+  const connection = getConnectionState(job);
   const alreadySaved = Boolean(job?.savedEntries?.both);
 
   return (
@@ -988,8 +989,8 @@ function Results({
         <>
           <div className="results-status-row" aria-live="polite">
             <StatusBadge
-              status={job.monitoringStopped ? "monitoring_stopped" : job.status}
-              label={job.status === "partial" && progress.finished === progress.total && progress.total > 0 ? "Completed with Issues" : undefined}
+              status={job.monitoringStopped ? "monitoring_stopped" : connection || job.status}
+              label={!connection && job.status === "partial" && progress.finished === progress.total && progress.total > 0 ? "Completed with Issues" : undefined}
             />
             <span className="progress-stage">
               {job.monitoringStopped ? "Status checks paused" : progress.stage}
@@ -997,7 +998,7 @@ function Results({
             {job.kind === "file" && progress.total > 0 && (
               <span className="result-counts">
                 <span>{progress.finished} of {progress.total} finished</span>
-                {progress.researching > 0 && (
+                {progress.researching > 0 && !connection && (
                   <span>{progress.researching} researching</span>
                 )}
               </span>
@@ -1005,7 +1006,7 @@ function Results({
           </div>
           <JobProgress job={job} />
 
-          {job.pollError && (
+          {job.pollError && !connection && (
             <div className="inline-notice warning" role="status">
               <AlertCircle size={17} />
               <span>{job.pollError} Retrying automatically.</span>
@@ -1034,13 +1035,21 @@ function Results({
               <span>{job.saveError}</span>
             </div>
           )}
-          {isActive && (
+          {connection && (
+            <p className="loading-status results-loading-note connection-status" role="status">
+              <RefreshCw className="spin" size={14} />
+              {connection === "reconnecting"
+                ? terminal ? "Connection interrupted. Results will load automatically." : "Connection interrupted. Research will resume automatically."
+                : "Connection restored. Resuming research."}
+            </p>
+          )}
+          {isActive && !connection && (
             <p className="loading-status results-loading-note" role="status">
               <i /> {job.kind === "file" ? getJobProgressSummary(job) : progress.stage}
             </p>
           )}
 
-          {!isActive && resultState(job) === "loading" && (
+          {!isActive && !connection && resultState(job) === "loading" && (
             <p className="loading-status results-loading-note" role="status">
               <RefreshCw className="spin" size={14} /> Loading completed results…
             </p>
@@ -1190,7 +1199,12 @@ export default function App() {
     updateJob(job.id, { resultsState: "loading", error: null });
     const promise = (async () => {
     try {
-      const response = await fetchTerminalResults(job, getJobResults, { signal: controller.signal });
+      const response = await fetchTerminalResults(job, getJobResults, {
+        signal: controller.signal,
+        onRecovery: (connectionState) => {
+          if (!controller.signal.aborted) updateJob(job.id, { connectionState, error: null, pollError: null });
+        },
+      });
       if (controller.signal.aborted) return;
       updateJob(job.id, {
         results: response,
@@ -1198,6 +1212,7 @@ export default function App() {
         status: response.status || job.status,
         error: null,
         pollError: null,
+        connectionState: null,
       });
     } catch (error) {
       if (error?.name === "AbortError" || error?.code === "REQUEST_ABORTED") {
@@ -1205,6 +1220,7 @@ export default function App() {
       }
       updateJob(job.id, {
         resultsState: "error",
+        connectionState: null,
         error: errorMessage(error, "Results could not be loaded."),
       });
     } finally {
@@ -1237,6 +1253,7 @@ export default function App() {
           signal: controller.signal,
         });
         if (stopped) return;
+        const connectionState = view.recovery_state || (consecutiveFailures > 0 ? "resuming" : null);
         consecutiveFailures = 0;
         updateJob(pollingJob.id, {
           status: view.status,
@@ -1245,6 +1262,8 @@ export default function App() {
           jobView: view,
           pollError: null,
           monitoringStopped: false,
+          connectionState,
+          error: null,
           ...(terminalStatuses.has(view.status) ? { resultsState: "loading" } : {}),
         });
         if (terminalStatuses.has(view.status)) {
@@ -1259,19 +1278,19 @@ export default function App() {
           error,
           "The job status could not be checked.",
         );
-        const nonRetryable = [400, 401, 403, 404, 409, 422].includes(
-          error?.status,
-        );
-        if (nonRetryable || consecutiveFailures >= 5) {
+        if (!isTransientReadError(error)) {
           updateJob(pollingJob.id, {
             monitoringStopped: true,
             pollError: null,
+            connectionState: null,
             error: `Status checks paused. ${message}`,
           });
           return;
         }
-        updateJob(pollingJob.id, { pollError: message });
-        timer = window.setTimeout(poll, 4000);
+        // Preserve the latest counts and results while read-only monitoring
+        // reconnects. Never resubmit or cancel the server-side research job.
+        updateJob(pollingJob.id, { connectionState: "reconnecting", pollError: null, error: null });
+        timer = window.setTimeout(poll, recoveryDelay(consecutiveFailures, error));
       }
     }
 
@@ -1349,6 +1368,7 @@ export default function App() {
         jobView: view,
         cancelPending: false,
         monitoringStopped: false,
+        connectionState: null,
       });
       if (terminalStatuses.has(view.status || "cancelled")) {
         await loadResults({ ...job, status: view.status || "cancelled" });
@@ -1679,7 +1699,7 @@ export default function App() {
                   </span>
                   <StatusBadge
                     status={
-                      job.monitoringStopped ? "monitoring_stopped" : job.status
+                      job.monitoringStopped ? "monitoring_stopped" : getConnectionState(job) || job.status
                     }
                   />
                   <ChevronRight size={17} />

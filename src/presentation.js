@@ -79,6 +79,12 @@ export function formatScoringValue(value) {
   return String(value);
 }
 
+export function getConnectionState(job) {
+  if (job?.monitoringStopped) return null;
+  return job?.connectionState ||
+    (["queued", "running"].includes(job?.status) ? job?.jobView?.recovery_state : null) || null;
+}
+
 export function getJobProgress(job) {
   const total = Number(job?.totalPeople) || 0;
   const counts = job?.counts;
@@ -93,7 +99,8 @@ export function getJobProgress(job) {
     : 0;
   const researching = counts ? Number(counts.researching) || 0 : 0;
   const isBatch = job?.kind === "file";
-  const stage = {
+  const connection = getConnectionState(job);
+  const stage = connection === "reconnecting" ? "Reconnecting" : connection === "resuming" ? "Resuming research" : {
     submitting: isBatch ? "Preparing batch" : "Submitting research request",
     queued: "Waiting for research to start",
     running: isBatch ? "Researching people" : "Researching person",

@@ -99,6 +99,20 @@ test("saved record text is escaped and source links reject active URL schemes", 
   assert.match(aggregate, /href="https:\/\/example.org\/record"/);
 });
 
+test("connection recovery keeps committed batch counts and avoids empty or failure messages", () => {
+  const job = { id: "recover", jobId: "job", kind: "file", status: "running", totalPeople: 100,
+    counts: { completed: 37, researching: 3, queued: 60 }, results: null };
+  for (const [connectionState, message] of [
+    ["reconnecting", "Connection interrupted. Research will resume automatically."],
+    ["resuming", "Connection restored. Resuming research."],
+  ]) {
+    const html = render("Results", { job: { ...job, connectionState }, regionRef: { current: null } });
+    assert.ok(html.includes(message));
+    assert.match(html, /37 of 100 finished/);
+    assert.doesNotMatch(html, /No records found|Status checks paused|Research failed/);
+  }
+});
+
 test("the shared schema and person skeleton show all eight fields in backend order", () => {
   assert.deepEqual(fields.map(([, label]) => label), expectedLabels);
   assert.equal(fields[1][0], "country_of_origin");

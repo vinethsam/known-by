@@ -5,6 +5,7 @@ import {
   formatLibrarySavedDate,
   formatLibraryError,
   getJobProgress,
+  getConnectionState,
   getJobProgressSummary,
   getSavedBy,
 } from "../src/presentation.js";
@@ -53,6 +54,14 @@ test("failed and review-required people count as finished", () => {
   assert.equal(progress.finished, 3);
   assert.equal(progress.percentage, 100);
   assert.equal(progress.stage, "Research completed with issues");
+});
+test("recovery stages retain the last committed progress and terminal jobs clear old metadata", () => {
+  const job = { kind: "file", status: "running", totalPeople: 100,
+    counts: { completed: 37, researching: 3, queued: 60 }, connectionState: "reconnecting" };
+  assert.deepEqual(getJobProgress(job), { total: 100, finished: 37, researching: 3, stage: "Reconnecting", percentage: 37 });
+  assert.equal(getJobProgress({ ...job, connectionState: "resuming" }).stage, "Resuming research");
+  assert.equal(getConnectionState({ ...job, connectionState: null, jobView: { recovery_state: "reconnecting" } }), "reconnecting");
+  assert.equal(getConnectionState({ ...job, status: "completed", connectionState: null, jobView: { recovery_state: "reconnecting" } }), null);
 });
 
 test("long-running batches show a human-readable current and total count", () => {

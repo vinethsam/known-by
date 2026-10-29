@@ -431,6 +431,31 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     });
   });
 
+  test("status reads accept additive recovery metadata and retain Retry-After", async () => {
+    const payload = { ...jobView, recovery_state: "reconnecting", recovery_reason: "DATABASE_UNAVAILABLE", retry_at: "2026-10-29T12:00:00Z" };
+    globalThis.fetch = async () => jsonResponse(payload);
+    assert.deepEqual(await getJob("job-1"), payload);
+    globalThis.fetch = async () => jsonResponse({ detail: "Temporarily unavailable" }, { status: 503, headers: { "Retry-After": "45" } });
+    await assert.rejects(getJob("job-1"), { status: 503, retryAfterMs: 45_000 });
+    globalThis.fetch = async () => jsonResponse({ ...payload, recovery_state: "unknown" });
+    await assert.rejects(getJob("job-1"), { code: "MALFORMED_RESPONSE" });
+  });
+
+  test("hung status reads time out and explicit cancellation stays distinct", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    globalThis.fetch = async (_url, { signal }) => new Promise((_, reject) => {
+      if (signal.aborted) reject(new DOMException("Aborted", "AbortError"));
+      else signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+    const timeout = assert.rejects(getJob("job-1"), { code: "READ_TIMEOUT" });
+    t.mock.timers.tick(30_000);
+    await timeout;
+    const controller = new AbortController();
+    const cancellation = assert.rejects(getJobResults("job-1", { signal: controller.signal }), { code: "REQUEST_ABORTED" });
+    controller.abort();
+    await cancellation;
+  });
+
   test("downloads exports with a safely parsed server filename", async () => {
     let requestUrl;
     globalThis.fetch = async (url) => {

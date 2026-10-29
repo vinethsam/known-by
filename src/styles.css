@@ -1086,6 +1086,8 @@ input:disabled {
   background: #8fa1ff0b;
 }
 .status-badge.running,
+.status-badge.reconnecting,
+.status-badge.resuming,
 .status-badge.researching,
 .status-badge.status-running,
 .status-badge.status-researching {
@@ -1093,6 +1095,11 @@ input:disabled {
   border-color: #8ea0ff4d;
   background: #7286ee17;
 }
+.connection-status {
+  white-space: normal;
+  line-height: 1.6;
+}
+.connection-status > svg { flex-shrink: 0; }
 .status-badge.completed,
 .status-badge.status-completed {
   color: #91d5b0;
