@@ -31,11 +31,12 @@ backend result. Profile values, confidence, coverage, evidence, alternatives,
 conflicts, and review codes come directly from that result. CSV and XLSX
 exports are downloaded from the backend.
 
-The shared field configuration displays Full Name, Country of Origin,
+The shared field configuration displays Full Name,
 Organisation, Job Title, University Name, Degree Type, Subject, and Profile
 Link in that order across person results, batch tables, and loading states.
-Country confidence and evidence use the same field details as every other
-field. Older results without a country remain supported and show Not found.
+The main table contains values only; confidence and provenance remain available
+in field details. CSV/XLSX downloads contain the seven values, six research
+confidence scores and Source URLs, including downloads of historical records.
 
 History is kept for the current browser session only.
 

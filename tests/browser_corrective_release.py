@@ -19,7 +19,7 @@ OUT = ROOT / ".qa" / "corrective-release"
 OUT.mkdir(parents=True, exist_ok=True)
 PORT = 5197
 ORIGIN = f"http://127.0.0.1:{PORT}"
-FIELDS = ["full_name", "country_of_origin", "organisation", "job_title", "university_name", "degree_type", "subject", "profile_link"]
+FIELDS = ["full_name", "organisation", "job_title", "university_name", "degree_type", "subject", "profile_link"]
 VALUES = ["Anna María McGill", "Ghana", "UNESCO", "Senior Research Analyst", "University of Ghana", "PhD", "Architecture", "https://example.org/a-very-long-biography-and-research-profile/anna-maria-mcgill"]
 saved = {"file_id": "fixture-file", "filename": "Research_2026-10-26.xlsx", "format": "xlsx", "available_formats": ["csv", "xlsx"], "can_delete": True, "saved_at": "2026-10-26T12:00:00Z", "research_started_at": "2026-10-26T11:59:00Z", "size_bytes": 128, "saved_by": "QA User"}
 

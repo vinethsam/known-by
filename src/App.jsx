@@ -809,8 +809,6 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
             <tr key={person.person_id || person.row_index}>
               {fields.map(([key, label]) => {
                 const decision = getPersonProfile(person)?.fields?.[key];
-                const confidence = getFieldConfidence(decision);
-                const provenanceLabel = getFieldProvenanceLabel(decision);
                 const originalName =
                   person.original_row?.full_name ??
                   person.original_row?.name ??
@@ -839,25 +837,6 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
                       <span className="field-result-value" title={value || undefined}>
                         {value || "Not found"}
                       </span>
-                      <span className="field-meta">
-                        {decision
-                          ? `${formatPercent(confidence.value)} ${confidence.label}`
-                          : person.error_code
-                            ? titleCase(person.error_code)
-                            : titleCase(person.status)}
-                        {key === "full_name" && decision && (
-                          <span className="person-row-status">
-                            {titleCase(person.status)}
-                          </span>
-                        )}
-                        {decision?.review_required && (
-                          <span className="review-dot">Review</span>
-                        )}
-                      </span>
-                      {provenanceLabel && <span className="field-meta">{provenanceLabel}</span>}
-                      {key === "university_name" && getPersonProfile(person)?.record_status && (
-                        <span className="field-meta">Education record · {titleCase(getPersonProfile(person).record_status)}</span>
-                      )}
                     </button>
                   </td>
                 );

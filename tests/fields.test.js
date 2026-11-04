@@ -27,23 +27,23 @@ after(async () => {
 });
 
 const expectedLabels = [
-  "Full Name", "Country of Origin", "Organisation", "Job Title",
+  "Full Name", "Organisation", "Job Title",
   "University Name", "Degree Type", "Subject", "Profile Link",
 ];
 
 const request = { kind: "person", label: "Test Person" };
-const countryDecision = {
-  value: "Sri Lanka",
+const universityDecision = {
+  value: "Lake University",
   confidence: 87,
   review_required: true,
   review_reason_codes: ["conflicting_evidence"],
-  selected_claim_id: "country-claim",
-  supporting_claim_ids: ["country-claim"],
-  supporting_source_ids: ["country-source"],
+  selected_claim_id: "university-claim",
+  supporting_claim_ids: ["university-claim"],
+  supporting_source_ids: ["university-source"],
   sources: ["https://example.org/biography"],
 };
 
-function personWithCountry(decision = countryDecision) {
+function personWithUniversity(decision = universityDecision) {
   return {
     person_id: "test-person",
     row_index: 1,
@@ -52,17 +52,17 @@ function personWithCountry(decision = countryDecision) {
     result: {
       profile: { fields: {
         full_name: { value: "Test Person", confidence: 99 },
-        country_of_origin: decision,
+        university_name: decision,
       } },
       claims: [{
-        claim_id: "country-claim",
-        source_id: "country-source",
-        normalised_value: "Sri Lanka",
-        evidence_text: "The biography explicitly states their country of origin.",
+        claim_id: "university-claim",
+        source_id: "university-source",
+        normalised_value: "Lake University",
+        evidence_text: "The biography explicitly states their university.",
         directness: "explicit",
       }],
       sources: [{
-        source_id: "country-source",
+        source_id: "university-source",
         final_url: "https://example.org/biography",
         title: "Test biography",
         domain: "example.org",
@@ -113,85 +113,85 @@ test("connection recovery keeps committed batch counts and avoids empty or failu
   }
 });
 
-test("the shared schema and person skeleton show all eight fields in backend order", () => {
+test("the shared schema and person skeleton show all seven fields in backend order", () => {
   assert.deepEqual(fields.map(([, label]) => label), expectedLabels);
-  assert.equal(fields[1][0], "country_of_origin");
+  assert.equal(fields.length, 7);
   assert.deepEqual(
     labelsIn(render("PersonSkeleton"), /class="field-label-text">([^<]+)</g),
     expectedLabels,
   );
 });
 
-test("country card and field details preserve backend confidence, review, and provenance", () => {
-  const person = personWithCountry();
+test("university card and field details preserve backend confidence, review, and provenance", () => {
+  const person = personWithUniversity();
   const card = render("FieldCard", {
-    field: "country_of_origin", label: "Country of Origin", person, request,
+    field: "university_name", label: "University Name", person, request,
   });
-  assert.match(card, /Sri Lanka/);
+  assert.match(card, /Lake University/);
   assert.match(card, /87% confidence/);
   assert.match(card, /1 source/);
   assert.match(card, /class="review-dot">Review/);
 
   const drawer = render("EvidenceDrawer", {
-    selection: { field: "country_of_origin", person, request },
+    selection: { field: "university_name", person, request },
   });
-  assert.match(drawer, /id="evidence-title">Country of Origin/);
+  assert.match(drawer, /id="evidence-title">University Name/);
   assert.match(drawer, /<strong>87%<\/strong>/);
   assert.match(drawer, /Review Required/);
   assert.match(drawer, /Supporting evidence/);
-  assert.match(drawer, /The biography explicitly states their country of origin\./);
+  assert.match(drawer, /The biography explicitly states their university\./);
   assert.match(drawer, /href="https:\/\/example.org\/biography"/);
   assert.match(drawer, /Test biography/);
 });
 
-test("null country stays missing while retaining real confidence and review metadata", () => {
-  const person = personWithCountry({
+test("null university stays missing while retaining real confidence and review metadata", () => {
+  const person = personWithUniversity({
     value: null, confidence: 0, review_required: true, sources: [],
   });
   const card = render("FieldCard", {
-    field: "country_of_origin", label: "Country of Origin", person, request,
+    field: "university_name", label: "University Name", person, request,
   });
   assert.match(card, /Not found/);
   assert.match(card, /0% confidence/);
   assert.match(card, /0 sources/);
   assert.match(card, /class="review-dot">Review/);
-  assert.doesNotMatch(card, /Sri Lanka|undefined|NaN/);
+  assert.doesNotMatch(card, /Lake University|undefined|NaN/);
 
   const drawer = render("EvidenceDrawer", {
-    selection: { field: "country_of_origin", person, request },
+    selection: { field: "university_name", person, request },
   });
   assert.match(drawer, /class="field-value missing">Not found/);
   assert.match(drawer, /No supporting evidence was returned for this field/);
 });
 
-test("legacy results without country render safely without inferring country from uploaded data", () => {
-  const person = personWithCountry();
-  delete person.result.profile.fields.country_of_origin;
-  person.original_row.country_of_origin = "Unverified input country";
+test("legacy results without university render safely without inferring university from uploaded data", () => {
+  const person = personWithUniversity();
+  delete person.result.profile.fields.university_name;
+  person.original_row.university_name = "Unverified input university";
 
   const card = render("FieldCard", {
-    field: "country_of_origin", label: "Country of Origin", person, request,
+    field: "university_name", label: "University Name", person, request,
   });
   assert.match(card, /Not found/);
   assert.match(card, /— confidence/);
-  assert.doesNotMatch(card, /Unverified input country|Sri Lanka|undefined|NaN/);
+  assert.doesNotMatch(card, /Unverified input university|Lake University|undefined|NaN/);
 
   const drawer = render("EvidenceDrawer", {
-    selection: { field: "country_of_origin", person, request },
+    selection: { field: "university_name", person, request },
   });
   assert.match(drawer, /No field result/);
-  assert.doesNotMatch(drawer, /Unverified input country|Sri Lanka|undefined|NaN/);
+  assert.doesNotMatch(drawer, /Unverified input university|Lake University|undefined|NaN/);
 
   const table = render("BatchTable", {
     job: { kind: "file", status: "completed", results: { people: [person] } },
   });
   assert.match(table, /Test Person/);
-  assert.doesNotMatch(table, /Unverified input country|Sri Lanka|undefined|NaN/);
+  assert.doesNotMatch(table, /Unverified input university|Lake University|undefined|NaN/);
 });
 
-test("batch results and batch skeleton retain all eight columns in the same order", () => {
+test("batch results and batch skeleton retain all seven columns in the same order", () => {
   const table = render("BatchTable", {
-    job: { kind: "file", status: "completed", results: { people: [personWithCountry()] } },
+    job: { kind: "file", status: "completed", results: { people: [personWithUniversity()] } },
   });
   const loading = render("BatchTable", {
     job: { kind: "file", status: "running", totalPeople: 2 },
@@ -199,19 +199,18 @@ test("batch results and batch skeleton retain all eight columns in the same orde
   for (const html of [table, loading]) {
     assert.deepEqual(labelsIn(html, /<th scope="col">([^<]+)</g), expectedLabels);
   }
-  assert.match(table, /Sri Lanka/);
-  assert.match(table, /87% confidence/);
-  assert.match(table, /class="review-dot">Review/);
-  assert.equal((table.match(/<td>/g) || []).length, 8);
-  assert.equal((loading.match(/<td>/g) || []).length, 16);
+  assert.match(table, /Lake University/);
+  assert.doesNotMatch(table, /87%|review-dot|field-meta|input certainty|research confidence/);
+  assert.equal((table.match(/<td>/g) || []).length, 7);
+  assert.equal((loading.match(/<td>/g) || []).length, 14);
 });
 
 test("batch rows retain input order in state while displaying ascending row numbers", () => {
-  const later = personWithCountry();
+  const later = personWithUniversity();
   later.row_index = 2;
   later.person_id = "later";
   later.result.profile.fields.full_name.value = "Later Person";
-  const earlier = personWithCountry();
+  const earlier = personWithUniversity();
   earlier.person_id = "earlier";
   earlier.result.profile.fields.full_name.value = "Earlier Person";
   const people = [later, earlier];
@@ -223,7 +222,7 @@ test("batch rows retain input order in state while displaying ascending row numb
 });
 
 test("supplied university stays distinct from missing independent research", () => {
-  const person = personWithCountry();
+  const person = personWithUniversity();
   person.result.profile.fields.university_name = {
     value: null, confidence: 0, research_confidence: 0,
     supplied_values: ["Example University"], input_confidence: 100,
@@ -258,17 +257,17 @@ test("supplied university stays distinct from missing independent research", () 
 
 test("corroborated and conflicting seed values retain both provenance and evidence confidence", () => {
   for (const provenance_status of ["corroborated", "conflicting", "superseded"]) {
-    const person = personWithCountry({
-      ...countryDecision, confidence: 87, research_confidence: 87,
-      supplied_values: ["Supplied country"], input_confidence: 100, provenance_status,
+    const person = personWithUniversity({
+      ...universityDecision, confidence: 87, research_confidence: 87,
+      supplied_values: ["Supplied university"], input_confidence: 100, provenance_status,
     });
-    const card = render("FieldCard", { field: "country_of_origin", label: "Country of Origin", person, request });
+    const card = render("FieldCard", { field: "university_name", label: "University Name", person, request });
     assert.match(card, /87%.*research confidence/);
     assert.doesNotMatch(card, /100%.*research confidence/);
-    const drawer = render("EvidenceDrawer", { selection: { field: "country_of_origin", person, request } });
-    assert.match(drawer, /Supplied country/);
+    const drawer = render("EvidenceDrawer", { selection: { field: "university_name", person, request } });
+    assert.match(drawer, /Supplied university/);
     assert.match(drawer, /100% input certainty/);
-    assert.match(drawer, /Sri Lanka/);
+    assert.match(drawer, /Lake University/);
     assert.match(drawer, /<strong>87%<\/strong>/);
     assert.match(drawer, /Supporting evidence/);
     assert.match(drawer, /href="https:\/\/example.org\/biography"/);
@@ -277,7 +276,7 @@ test("corroborated and conflicting seed values retain both provenance and eviden
 });
 
 test("immutable supplied name labels its 100 percent as input certainty", () => {
-  const person = personWithCountry();
+  const person = personWithUniversity();
   person.result.profile.fields.full_name = {
     value: "Test Person", confidence: 100, input_confidence: 100,
     research_confidence: 0, provenance_status: "supplied", supplied_values: ["Test Person"],
@@ -290,13 +289,13 @@ test("immutable supplied name labels its 100 percent as input certainty", () => 
     job: { kind: "file", status: "completed", results: { people: [person] } },
   });
   assert.deepEqual(labelsIn(table, /<th scope="col">([^<]+)</g), expectedLabels);
-  assert.match(table, /100% input certainty/);
+  assert.doesNotMatch(table, /100% input certainty|research confidence/);
   const drawer = render("EvidenceDrawer", { selection: { field: "full_name", person, request } });
   assert.match(drawer, /Research confidence<\/span><strong>0%/);
 });
 
 test("a different researched university never inherits supplied input certainty", () => {
-  const person = personWithCountry();
+  const person = personWithUniversity();
   person.result.profile.fields.university_name = {
     value: "Researched University", confidence: 83, research_confidence: 83,
     supplied_values: ["Supplied University"], input_confidence: 100,
@@ -314,7 +313,7 @@ test("a different researched university never inherits supplied input certainty"
 });
 
 test("historical employment remains original input and does not populate a current role", () => {
-  const person = personWithCountry();
+  const person = personWithUniversity();
   person.result.profile.seed_attributes = [
     { column: "Previous Employer", value: "Historical Company", field: "historical_employer", category: "biographical", input_confidence: 100 },
   ];
@@ -348,7 +347,7 @@ test("failed research still renders all supplied fields and separate certainty i
 
 test("Save to Database is present for useful completed-with-issues results", () => {
   const job = { id: 1, jobId: "job", kind: "file", status: "partial", totalPeople: 2,
-    counts: { completed: 1, failed: 1 }, results: { people: [personWithCountry()] } };
+    counts: { completed: 1, failed: 1 }, results: { people: [personWithUniversity()] } };
   const html = render("Results", { job, regionRef: { current: null } });
   assert.match(html, /Save to Database/);
   assert.match(html, /Completed with Issues/);
@@ -368,7 +367,7 @@ test("failed and cancelled supplied-only profiles preserve outcome without inven
 });
 
 test("historical professional context is visible in field details and never labeled current", () => {
-  const person = personWithCountry();
+  const person = personWithUniversity();
   person.result.profile.fields.organisation = { value: "Established Practice", confidence: 91, review_required: true,
     review_reason_codes: ["HISTORICAL_PROFESSIONAL_AFFILIATION"], scoring_components: {
       relationship_temporal_status: "historical", relationship_type: "principal_professional_practice",
@@ -380,7 +379,7 @@ test("historical professional context is visible in field details and never labe
 
 test("canonical API display casing agrees across table, card and details without changing raw input", () => {
   for (const value of ["IBM", "UNESCO", "McGill", "PwC", "ETH Zürich", "RPBW", "University of Ghana", "Universidade de São Paulo"]) {
-    const person = personWithCountry();
+    const person = personWithUniversity();
     person.result.profile.fields.organisation = { value, confidence: 87, review_required: false };
     const card = render("FieldCard", { field: "organisation", label: "Organisation", person, request });
     const table = render("BatchTable", { job: { status: "completed", results: { people: [person] } } });
