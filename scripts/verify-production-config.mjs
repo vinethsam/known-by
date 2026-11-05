@@ -17,7 +17,9 @@ const bundle = await readFile(join("dist", entry.replace(config.base, "")), "utf
 assert.ok(bundle.includes(expectedRoot), "Production entry does not contain the resolved API root");
 assert.doesNotMatch(bundle, /__KNOWNBY_API_ROOT__|(["'`])\/api\/v1\1/,
   "Production entry still uses an unresolved or development-only API root");
-assert.doesNotMatch(bundle, /BACKEND_API_TOKEN/, "Server-only token configuration entered the bundle");
+assert.doesNotMatch(bundle, /BACKEND_API_TOKEN|API_ACCESS_TOKEN|LIBRARY_DELETE_TOKEN|OPENROUTER_API_KEY|GOOGLE_CLIENT_SECRET/,
+  "Server-only token configuration entered the bundle");
+assert.ok(bundle.includes("https://accounts.google.com/gsi/client"), "Production entry is missing Google sign-in");
 
 // Exercise both submission paths with fetch completely mocked: never start research.
 globalThis.__KNOWNBY_API_ROOT__ = apiRoot;
@@ -39,4 +41,23 @@ for (const { url, options } of requests) {
   assert.ok(url.startsWith(`${expectedRoot}/`));
   assert.equal(new Headers(options.headers).has("Authorization"), false);
 }
+// Also verify the production destination carries a verified user's credential,
+// rather than requiring a server-held key in the static frontend.
+requests.length = 0;
+globalThis.fetch = async (url, options) => {
+  requests.push({ url, options });
+  const payload = new URL(url).pathname.endsWith("/auth/me")
+    ? { authentication: "google", email: "configuration@example.test", subject: "configuration-user",
+        expires_at: Math.floor(Date.now() / 1000) + 3600, can_delete: false }
+    : [];
+  return new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } });
+};
+await api.authenticateGoogle("mock-per-user-credential");
+await api.listLibraryFiles();
+assert.deepEqual(requests.map(({ url }) => new URL(url).pathname), ["/v1/auth/me", "/v1/library/files"]);
+for (const { url, options } of requests) {
+  assert.ok(url.startsWith(`${expectedRoot}/`));
+  assert.equal(new Headers(options.headers).get("Authorization"), "Bearer mock-per-user-credential");
+}
+api.signOut();
 console.log(`Verified production bundle and mocked API destinations: ${apiRoot}`);

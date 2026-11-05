@@ -21,9 +21,12 @@ uses `https://known-by-backend-production.up.railway.app`. Invalid explicit URLs
 the build. Local URL overrides and the authenticated development proxy are preserved.
 The Pages workflow checks the emitted entry and mocked submission destinations.
 
-GitHub Pages cannot run Vite's development proxy. The destination backend must
-separately support the Pages origin and its existing authentication requirements;
-URL configuration does not provide authorization or expose the server token.
+GitHub Pages uses Google sign-in rather than Vite's development proxy. Railway
+provides the public Google client ID through `/v1/auth/config`, verifies each
+user credential and enforces its approved-email allowlist. Configure the Google
+Web client's authorized JavaScript origin as `https://vinethsam.github.io` and
+allow that exact origin in backend CORS. No Google client secret or server API
+key belongs in the static frontend.
 
 ```sh
 npm install
@@ -59,8 +62,9 @@ adding it again. The Database tab shows the team's shared saved files, with down
 confirmed delete actions. File names and saved dates come from the backend;
 compact rows always show the saver identity supplied by the backend, or
 Unknown when unavailable. The current shared-token backend does not identify
-individual savers; the frontend never infers identity from the browser. Library requests
-use the same authenticated `/api/*` proxy as research requests.
+individual savers; the frontend never infers saver identity from the browser.
+Library requests and downloads use the same authenticated transport as research.
+Google members receive no additional delete privileges.
 
 ## Startup and account UI
 
@@ -70,10 +74,11 @@ service. Reduced motion uses a paused orb and a shorter transition. Thinking
 Orbs is used only at startup, tinted with KnownBy's existing accent color;
 research keeps its existing skeleton loader.
 
-The header account button opens the signed-out account dialog. Google sign-in
-is visibly unavailable until a real authentication backend is connected.
-There are no simulated sessions, user profiles, or OAuth requests. The dialog
-is isolated in `src/account/AccountDialog.jsx` for future integration.
+The header account button opens Google sign-in and displays the identity
+verified by Railway. The short-lived user credential stays in page memory;
+refreshing, signing out, expiration or an unauthorized response clears it.
+Production research submission prompts for sign-in without automatically
+submitting a job afterward. Local development retains its server-held proxy key.
 
 ## Validation
 
@@ -86,4 +91,5 @@ npm run build
 
 The API tests cover relative proxy paths, person JSON, multipart uploads,
 status/results/cancel requests, Shared Library actions, readable backend
-errors, and binary export filenames.
+errors, binary export filenames, and verified Google credential handling. CI
+also checks the emitted production destination and mocked authenticated reads.

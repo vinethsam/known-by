@@ -3,17 +3,22 @@ import { afterEach, describe, test } from "node:test";
 
 import {
   ApiError,
+  authenticateGoogle,
   cancelJob,
   deleteLibraryFile,
   downloadExport,
   downloadLibraryFile,
   getJob,
   getJobResults,
+  getAuthConfig,
+  getSignedInUser,
   getLibraryRecords,
   listLibraryFiles,
   researchBatch,
   researchPerson,
   saveJobToLibrary,
+  signOut,
+  subscribeToSignInRequired,
 } from "../src/api.js";
 
 const originalFetch = globalThis.fetch;
@@ -22,6 +27,7 @@ const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
 
 afterEach(() => {
+  signOut();
   globalThis.fetch = originalFetch;
   globalThis.document = originalDocument;
   URL.createObjectURL = originalCreateObjectURL;
@@ -112,6 +118,103 @@ function installDownloadHarness() {
 }
 
 describe("KnownBy browser API", { concurrency: false }, () => {
+  const googleUser = () => ({ authentication: "google", subject: "google-user-id",
+    email: "approved@example.test", can_delete: false, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+
+  test("verifies Google sign-in before retaining a memory-only credential and authenticates reads and downloads", async () => {
+    const requests = [];
+    const user = googleUser();
+    const config = { enabled: true, google_client_id: "public-client.apps.googleusercontent.com" };
+    const harness = installDownloadHarness();
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, init });
+      if (url.endsWith("/auth/config")) return jsonResponse(config);
+      if (url.endsWith("/auth/me")) {
+        assert.equal(getSignedInUser(), null);
+        return jsonResponse(user);
+      }
+      if (url.includes("/export?")) return new Response("Full Name\nExample\n");
+      return jsonResponse([]);
+    };
+    assert.deepEqual(await getAuthConfig(), config);
+    assert.deepEqual(await authenticateGoogle("per-user-id-token"), user);
+    assert.deepEqual(getSignedInUser(), user);
+    await listLibraryFiles();
+    await downloadExport("saved-job", "csv");
+    assert.equal(harness.state().clicked, true);
+    assert.equal(new Headers(requests[0].init.headers).has("Authorization"), false);
+    for (const request of requests.slice(1)) {
+      assert.equal(new Headers(request.init.headers).get("Authorization"), "Bearer per-user-id-token");
+      assert.equal(request.init.credentials, "same-origin");
+    }
+    signOut();
+    assert.equal(getSignedInUser(), null);
+    await listLibraryFiles();
+    assert.equal(new Headers(requests.at(-1).init.headers).has("Authorization"), false);
+  });
+
+  test("rejected or expired Google credentials are not retained and sign-out cancels pending sign-in", async () => {
+    globalThis.fetch = async () => jsonResponse({ detail: "Account is not approved" }, { status: 403 });
+    await assert.rejects(authenticateGoogle("unapproved-token"), { status: 403 });
+    assert.equal(getSignedInUser(), null);
+    globalThis.fetch = async (_url, init) => {
+      assert.equal(new Headers(init.headers).has("Authorization"), false);
+      return jsonResponse([]);
+    };
+    await listLibraryFiles();
+    globalThis.fetch = async () => jsonResponse({ ...googleUser(), expires_at: 1 });
+    await assert.rejects(authenticateGoogle("expired-token"), { code: "MALFORMED_RESPONSE" });
+    assert.equal(getSignedInUser(), null);
+    let finish;
+    globalThis.fetch = () => new Promise((resolve) => { finish = resolve; });
+    const pending = authenticateGoogle("late-token");
+    signOut();
+    finish(jsonResponse(googleUser()));
+    assert.equal(await pending, null);
+    assert.equal(getSignedInUser(), null);
+  });
+
+  test("an unauthorized response clears the active credential and requests sign-in", async () => {
+    globalThis.fetch = async () => jsonResponse(googleUser());
+    await authenticateGoogle("expired-by-server-token");
+    let prompted = 0;
+    const unsubscribe = subscribeToSignInRequired(() => { prompted += 1; });
+    try {
+      globalThis.fetch = async () => jsonResponse({ detail: "Authentication required" }, { status: 401 });
+      await assert.rejects(listLibraryFiles(), { status: 401 });
+      assert.equal(getSignedInUser(), null);
+      assert.equal(prompted, 1);
+      globalThis.fetch = async (_url, init) => {
+        assert.equal(new Headers(init.headers).has("Authorization"), false);
+        return jsonResponse([]);
+      };
+      await listLibraryFiles();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("a late unauthorized request cannot sign out or prompt over a newer verified account", async () => {
+    globalThis.fetch = async () => jsonResponse(googleUser());
+    await authenticateGoogle("old-user-token");
+    let finish;
+    globalThis.fetch = () => new Promise((resolve) => { finish = resolve; });
+    const oldRead = listLibraryFiles();
+    const newUser = { ...googleUser(), subject: "new-user-id" };
+    globalThis.fetch = async () => jsonResponse(newUser);
+    await authenticateGoogle("new-user-token");
+    let prompted = false;
+    const unsubscribe = subscribeToSignInRequired(() => { prompted = true; });
+    try {
+      finish(jsonResponse({ detail: "Expired token" }, { status: 401 }));
+      await assert.rejects(oldRead, { status: 401 });
+      assert.deepEqual(getSignedInUser(), newUser);
+      assert.equal(prompted, false);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("uses the person contract and only the relative proxy URL", async () => {
     const signal = new AbortController().signal;
     let request;

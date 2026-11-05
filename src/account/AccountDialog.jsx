@@ -1,29 +1,66 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowRight, LockKeyhole, UserRound, X } from "lucide-react";
 import { useGlassSurface } from "../glass/useGlassSurface.js";
+import { authenticateGoogle, browserSignInRequired, formatApiError, getAuthConfig, getSignedInUser, signOut, subscribeToAccount } from "../api.js";
+import { renderGoogleSignIn } from "./googleIdentity.js";
 import "./account.css";
 
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.89-1.74 2.98-4.3 2.98-7.36ZM12 22c2.7 0 4.96-.9 6.62-2.41l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.12H3.05v2.59A10 10 0 0 0 12 22ZM6.4 13.92A6 6 0 0 1 6.09 12c0-.67.11-1.32.31-1.92V7.49H3.05A10 10 0 0 0 2 12c0 1.61.39 3.14 1.05 4.51l3.35-2.59ZM12 5.96c1.47 0 2.79.51 3.83 1.51l2.87-2.87A9.64 9.64 0 0 0 12 2a10 10 0 0 0-8.95 5.49l3.35 2.59C7.19 7.72 9.4 5.96 12 5.96Z"
-      />
-    </svg>
-  );
-}
-
-/** Signed-out entry point. Google authentication can be connected here later. */
 export default function AccountDialog({ onClose }) {
   const dialogRef = useRef(null);
+  const googleButton = useRef(null);
   const backdropPointerDown = useRef(false);
   const [closing, setClosing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
+  const user = useSyncExternalStore(subscribeToAccount, getSignedInUser);
+  const developmentConnection = !browserSignInRequired();
   const titleId = useId();
   const descriptionId = useId();
   const availabilityId = useId();
 
   useGlassSurface(dialogRef, { surfaceOpacity: 0.34, borderRadius: 18 });
+
+  useEffect(() => {
+    if (user || developmentConnection) return undefined;
+    let stopped = false;
+    let removeButton;
+    const controller = new AbortController();
+    setLoading(true);
+    setVerifying(false);
+    setError("");
+    (async () => {
+      try {
+        const config = await getAuthConfig({ signal: controller.signal });
+        if (stopped) return;
+        if (!config.enabled || !config.google_client_id) {
+          throw new Error("Google sign-in is not configured. Please contact the KnownBy administrator.");
+        }
+        removeButton = await renderGoogleSignIn(googleButton.current, config.google_client_id, async (credential) => {
+          if (stopped) return;
+          setVerifying(true);
+          setError("");
+          try {
+            await authenticateGoogle(credential);
+          } catch (failure) {
+            if (!stopped) setError(formatApiError(failure));
+          } finally {
+            if (!stopped) setVerifying(false);
+          }
+        });
+        if (stopped) removeButton();
+      } catch (failure) {
+        if (!stopped) setError(formatApiError(failure));
+      } finally {
+        if (!stopped) setLoading(false);
+      }
+    })();
+    return () => {
+      stopped = true;
+      controller.abort();
+      removeButton?.();
+    };
+  }, [user, developmentConnection]);
 
   useEffect(() => {
     const panel = dialogRef.current;
@@ -57,7 +94,7 @@ export default function AccountDialog({ onClose }) {
     <dialog
       ref={dialogRef}
       className="account-dialog"
-      data-auth-state="signed-out"
+      data-auth-state={user ? "signed-in" : "signed-out"}
       data-closing={closing || undefined}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
@@ -86,30 +123,28 @@ export default function AccountDialog({ onClose }) {
         </button>
       </div>
 
-      <div className="account-state"><UserRound size={13} /> Signed out</div>
+      <div className="account-state"><UserRound size={13} /> {user ? "Signed in" : developmentConnection ? "Development" : "Signed out"}</div>
       <h2 id={titleId}>Your KnownBy account</h2>
       <p id={descriptionId} className="account-description">
-        Google sign-in is coming to KnownBy.
+        {user ? user.email : developmentConnection ? "Local development connection" : "Sign in with your approved Google account."}
       </p>
 
       <div className="account-provider">
-        <button
-          className="account-google"
-          type="button"
-          disabled
-          aria-describedby={availabilityId}
-        >
-          <GoogleMark />
-          Continue with Google
-        </button>
-        <p id={availabilityId} className="account-availability">
-          <LockKeyhole size={13} />
-          Google sign-in is not available yet.
+        {user ? (
+          <button className="account-google" type="button" onClick={signOut}>Sign out</button>
+        ) : !developmentConnection && (
+          <div ref={googleButton} className="account-google-button" aria-busy={loading || verifying} />
+        )}
+        <p id={availabilityId} className="account-availability" role={error ? "alert" : "status"}>
+          <LockKeyhole size={13} aria-hidden="true" />
+          {error || (developmentConnection ? "This session uses the configured development connection." :
+            verifying ? "Verifying your account…" : loading && !user ? "Loading Google sign-in…" :
+            user ? "Access verified by KnownBy." : "Only approved accounts can access research and saved results.")}
         </p>
       </div>
 
       <div className="account-dialog-footer">
-        <p>You can continue using KnownBy without signing in.</p>
+        <p>{user || developmentConnection ? "You can continue to KnownBy." : "Sign in to research people and open the Database."}</p>
         <button className="account-continue" type="button" onClick={() => setClosing(true)}>
           Continue to KnownBy <ArrowRight size={15} />
         </button>

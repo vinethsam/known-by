@@ -168,7 +168,7 @@ def run():
             assert state["deletes"] == 1
             state["denied"] = True
             page.reload()
-            expect(page.get_by_text("Shared Library access requires authorization. Contact your administrator.", exact=True)).to_be_visible()
+            expect(page.get_by_text("Sign in with an approved Google account to open Shared Library.", exact=True)).to_be_visible()
             print(json.dumps({"passed": True, "result_fetches": state["results"], "save_requests": state["saves"], "delete_requests": state["deletes"], "download_formats": state["downloads"], "preview_requests": state["previews"], "badge": dimensions, "screenshots": str(OUT)}, indent=2))
             browser.close()
     finally:

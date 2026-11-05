@@ -28,6 +28,37 @@ const JSON_HEADERS = {
   "Content-Type": "application/json",
 };
 
+// A short-lived, per-user Google credential lives only in this page's memory.
+// The backend verifies it before the browser treats the account as signed in.
+let googleCredential = "";
+let signedInUser = null;
+let accountExpiryTimer;
+let accountRevision = 0;
+const accountListeners = new Set();
+const signInListeners = new Set();
+
+export const getSignedInUser = () => signedInUser;
+export const browserSignInRequired = () => /^https?:\/\//i.test(API_ROOT);
+
+export function subscribeToAccount(listener) {
+  accountListeners.add(listener);
+  return () => accountListeners.delete(listener);
+}
+
+export function subscribeToSignInRequired(listener) {
+  signInListeners.add(listener);
+  return () => signInListeners.delete(listener);
+}
+
+export function signOut() {
+  accountRevision += 1;
+  googleCredential = "";
+  signedInUser = null;
+  clearTimeout(accountExpiryTimer);
+  for (const listener of accountListeners) listener();
+  globalThis.google?.accounts?.id?.disableAutoSelect?.();
+}
+
 export class ApiError extends Error {
   constructor(message, options = {}) {
     super(message, options.cause ? { cause: options.cause } : undefined);
@@ -137,20 +168,29 @@ function requestFailure(error) {
   );
 }
 
-async function fetchFromApi(path, init) {
+async function fetchFromApi(path, init = {}, credential = googleCredential) {
   try {
-    return await fetch(path, {
+    const headers = new Headers(init.headers);
+    if (credential) headers.set("Authorization", `Bearer ${credential}`);
+    const response = await fetch(path, {
       credentials: "same-origin",
       cache: "no-store",
       ...init,
+      headers,
     });
+    if (response.status === 401) {
+      // A late response from an old request must not sign out a newer account.
+      if (credential && credential === googleCredential) signOut();
+      if (!signedInUser) for (const listener of signInListeners) listener();
+    }
+    return response;
   } catch (error) {
     throw requestFailure(error);
   }
 }
 
-async function requestJson(path, init = {}) {
-  const response = await fetchFromApi(path, init);
+async function requestJson(path, init = {}, credential) {
+  const response = await fetchFromApi(path, init, credential);
   const parsed = await parseResponsePayload(response);
 
   if (!response.ok) {
@@ -420,12 +460,41 @@ async function validateResponse(promise, validator, responseName) {
 }
 
 export function formatApiError(error) {
+  if (error?.status === 401) return "Sign in with an approved Google account to continue.";
   if (error instanceof ApiError) return error.message;
   if (error?.name === "AbortError") return "The request was cancelled.";
   if (typeof error?.message === "string" && error.message.trim()) {
     return error.message.trim();
   }
   return "Something went wrong while contacting the research service.";
+}
+
+export function getAuthConfig(options = {}) {
+  return validateResponse(requestJson(`${API_ROOT}/auth/config`, {
+    headers: { Accept: "application/json" }, signal: options.signal,
+  }, ""), (value) => isRecord(value) && typeof value.enabled === "boolean" &&
+    (value.google_client_id === null || typeof value.google_client_id === "string"), "sign-in configuration");
+}
+
+export async function authenticateGoogle(credential) {
+  if (typeof credential !== "string" || !credential.trim()) {
+    throw new ApiError("Google did not return a sign-in credential. Please try again.", { code: "INVALID_CREDENTIAL" });
+  }
+  const revision = ++accountRevision;
+  const user = await validateResponse(requestJson(`${API_ROOT}/auth/me`, {
+    headers: { Accept: "application/json" },
+  }, credential), (value) => isRecord(value) && value.authentication === "google" &&
+    typeof value.email === "string" && typeof value.subject === "string" &&
+    Number.isFinite(value.expires_at) && value.expires_at * 1000 > Date.now(), "account");
+  if (revision !== accountRevision) return null;
+  googleCredential = credential;
+  signedInUser = Object.freeze({ ...user });
+  clearTimeout(accountExpiryTimer);
+  accountExpiryTimer = setTimeout(signOut, Math.min(2_147_483_647, Math.max(0, user.expires_at * 1000 - Date.now())));
+  // Node's test runner should not wait for an otherwise idle browser session.
+  accountExpiryTimer.unref?.();
+  for (const listener of accountListeners) listener();
+  return signedInUser;
 }
 
 export function researchPerson(person, options = {}) {

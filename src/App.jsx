@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -17,12 +17,16 @@ import {
 } from "lucide-react";
 import {
   cancelJob,
+  browserSignInRequired,
   downloadExport,
   getJob,
   getJobResults,
+  getSignedInUser,
   researchBatch,
   researchPerson,
   saveJobToLibrary,
+  subscribeToAccount,
+  subscribeToSignInRequired,
 } from "./api.js";
 import { fields } from "./data.js";
 import { canSaveJob, fetchTerminalResults, isTransientReadError, recoveryDelay, resultState } from "./results-state.js";
@@ -1083,6 +1087,7 @@ export default function App() {
   const [starting, setStarting] = useState(true);
   const [interfaceRevealed, setInterfaceRevealed] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const signedInUser = useSyncExternalStore(subscribeToAccount, getSignedInUser);
   const [saveNotice, setSaveNotice] = useState(null);
   const [libraryRevision, setLibraryRevision] = useState(0);
   const [nav, setNav] = useState(sectionFromHash);
@@ -1103,6 +1108,10 @@ export default function App() {
   const pendingSaves = useRef(new Set());
   const savedEntries = useRef(new Map());
   const resultRequests = useRef(new Map());
+  useEffect(() => subscribeToSignInRequired(() => setAccountOpen(true)), []);
+  useEffect(() => {
+    if (signedInUser) setLibraryRevision((revision) => revision + 1);
+  }, [signedInUser]);
   useEffect(() => () => {
     for (const request of resultRequests.current.values()) request.controller.abort();
   }, []);
@@ -1288,6 +1297,10 @@ export default function App() {
       (kind === "person" && trimmedName.length < 2) ||
       (kind === "file" && !file)
     ) {
+      return;
+    }
+    if (browserSignInRequired() && !getSignedInUser()) {
+      setAccountOpen(true);
       return;
     }
 
@@ -1513,10 +1526,10 @@ export default function App() {
             <button
               type="button"
               className="account-control"
-              aria-label="Open account"
+              aria-label={signedInUser ? `Open account for ${signedInUser.email}` : "Open account"}
               aria-haspopup="dialog"
               aria-expanded={accountOpen}
-              title="Account"
+              title={signedInUser ? signedInUser.email : "Account"}
               onClick={() => setAccountOpen(true)}
             >
               <UserRound size={20} />

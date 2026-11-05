@@ -171,7 +171,7 @@ export function formatLibraryError(error, fallback = "Unable to complete this li
     return "Could not reach Shared Library. Check your connection and try again.";
   }
   return {
-    401: "Shared Library access requires authorization. Contact your administrator.",
+    401: "Sign in with an approved Google account to open Shared Library.",
     403: "You do not have permission to use Shared Library.",
     404: "This research or saved file is no longer available. Refresh and try again.",
     409: "This action is not available in the current state. Refresh and try again.",

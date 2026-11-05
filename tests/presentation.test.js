@@ -135,6 +135,7 @@ test("library errors explain safe actions without exposing backend details", () 
   const raw = "SQL failed for secret storage-id and internal job-id";
   assert.equal(formatLibraryError({ status: 500, message: raw }, "Unable to save this result."), "Unable to save this result.");
   assert.equal(formatLibraryError({ message: raw }, "Unable to load files."), "Unable to load files.");
+  assert.match(formatLibraryError({ status: 401, message: raw }), /Sign in.*approved Google account/);
   assert.match(formatLibraryError({ status: 403, message: raw }), /permission/);
   assert.match(formatLibraryError({ code: "NETWORK_ERROR", message: raw }), /connection/);
   assert.match(formatLibraryError({ status: 404, message: raw }), /no longer available/);
