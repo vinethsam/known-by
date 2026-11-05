@@ -36,6 +36,9 @@ jobs:
         run: npm test
 
       - name: Build
+        env:
+          BACKEND_API_URL: ${{ vars.BACKEND_API_URL }}
+          VITE_BACKEND_API_URL: ${{ vars.BACKEND_API_URL }}
         run: npm run build
 
       - name: Setup Pages
