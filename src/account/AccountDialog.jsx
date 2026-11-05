@@ -137,9 +137,10 @@ export default function AccountDialog({ onClose }) {
         )}
         <p id={availabilityId} className="account-availability" role={error ? "alert" : "status"}>
           <LockKeyhole size={13} aria-hidden="true" />
-          {error || (developmentConnection ? "This session uses the configured development connection." :
-            verifying ? "Verifying your account…" : loading && !user ? "Loading Google sign-in…" :
-            user ? "Access verified by KnownBy." : "Only approved accounts can access research and saved results.")}
+          {user ? "Access verified by KnownBy." : error || (developmentConnection ?
+            "This session uses the configured development connection." : verifying ?
+            "Verifying your account…" : loading ? "Loading Google sign-in…" :
+            "Only approved accounts can access research and saved results.")}
         </p>
       </div>
 
