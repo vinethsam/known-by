@@ -4,7 +4,30 @@ import { describe, test } from "node:test";
 import {
   isAllowedProxyRoute,
   isSameOriginProxyRequest,
+  resolveBackendUrl,
 } from "../vite.config.js";
+
+test("resolves the public production fallback while keeping development overrides", () => {
+  assert.deepEqual(resolveBackendUrl({}, { production: true }), {
+    target: "https://known-by-backend-production.up.railway.app",
+  });
+  assert.deepEqual(resolveBackendUrl({ BACKEND_API_URL: " http://127.0.0.1:8000/ " }), {
+    target: "http://127.0.0.1:8000",
+  });
+  assert.deepEqual(resolveBackendUrl({ VITE_BACKEND_API_URL: "https://configured.example/" }, { production: true }), {
+    target: "https://configured.example",
+  });
+  assert.deepEqual(resolveBackendUrl({ BACKEND_API_URL: "https://canonical.example", VITE_BACKEND_API_URL: "https://alias.example" }), {
+    target: "https://canonical.example",
+  });
+  assert.equal(resolveBackendUrl({}).error, "BACKEND_API_URL is not configured");
+});
+
+test("rejects invalid explicit backend URLs instead of hiding them with a fallback", () => {
+  for (const url of ["invalid", "javascript:alert(1)", "https://user:password@example.com", "https://example.com?token=x", "https://example.com#fragment", "http://example.com"]) {
+    assert.ok(resolveBackendUrl({ BACKEND_API_URL: url }, { production: true }).error, url);
+  }
+});
 
 function request(url, method = "GET", headers = {}) {
   return {

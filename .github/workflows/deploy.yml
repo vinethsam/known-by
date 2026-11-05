@@ -39,7 +39,9 @@ jobs:
         env:
           BACKEND_API_URL: ${{ vars.BACKEND_API_URL }}
           VITE_BACKEND_API_URL: ${{ vars.BACKEND_API_URL }}
-        run: npm run build
+        run: |
+          npm run build
+          node scripts/verify-production-config.mjs https://known-by-backend-production.up.railway.app
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

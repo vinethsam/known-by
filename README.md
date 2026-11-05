@@ -12,9 +12,18 @@ BACKEND_API_URL=https://your-railway-backend.example
 BACKEND_API_TOKEN=your-api-access-token
 ```
 
-The variables deliberately do not use a `VITE_` prefix. They are read only by
-the Vite development server, which adds the bearer token while proxying
-browser requests from `/api/*` to the configured backend.
+The development server adds the server-held bearer token while proxying browser
+requests from `/api/*` to the configured backend. The token stays server-side.
+
+Static builds resolve `BACKEND_API_URL` (or the `VITE_BACKEND_API_URL` alias) and
+compile one public `/v1` API root into the browser. If neither is supplied, production
+uses `https://known-by-backend-production.up.railway.app`. Invalid explicit URLs fail
+the build. Local URL overrides and the authenticated development proxy are preserved.
+The Pages workflow checks the emitted entry and mocked submission destinations.
+
+GitHub Pages cannot run Vite's development proxy. The destination backend must
+separately support the Pages origin and its existing authentication requirements;
+URL configuration does not provide authorization or expose the server token.
 
 ```sh
 npm install

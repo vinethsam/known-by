@@ -1180,6 +1180,13 @@ input:disabled {
 .inline-notice svg {
   margin-top: 2px;
 }
+.results-panel > .inline-notice:last-child {
+  margin-bottom: 18px;
+}
+.results-panel > .inline-notice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .inline-notice.error {
   border-color: #d8707b38;
   background: #c35d6810;

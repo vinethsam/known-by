@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 
 const URL_PLACEHOLDER = "PASTE_RAILWAY_BACKEND_URL_HERE";
 const TOKEN_PLACEHOLDER = "PASTE_RAILWAY_API_ACCESS_TOKEN_HERE";
+const PRODUCTION_BACKEND_URL = "https://known-by-backend-production.up.railway.app";
 const API_ROUTES = [
   ["POST", /^\/v1\/research\/(?:person|batch)$/],
   ["GET", /^\/v1\/jobs\/[^/]+$/],
@@ -56,12 +57,13 @@ export function isAllowedProxyRoute(request) {
   );
 }
 
-function readProxyConfiguration(mode) {
-  // An empty prefix is intentional: these values stay in this server-side
-  // configuration file and are never exposed through import.meta.env.
-  const environment = loadEnv(mode, process.cwd(), "");
-  const backendUrl = environment.BACKEND_API_URL?.trim() ?? "";
-  const backendToken = environment.BACKEND_API_TOKEN?.trim() ?? "";
+export function resolveBackendUrl(environment, { production = false } = {}) {
+  // BACKEND_API_URL remains the canonical override; accept the existing VITE_
+  // alias too. Only the public URL is ever compiled into the browser bundle.
+  const configured = [environment.BACKEND_API_URL, environment.VITE_BACKEND_API_URL]
+    .map((value) => typeof value === "string" ? value.trim() : "")
+    .find((value) => value && value !== URL_PLACEHOLDER);
+  const backendUrl = configured || (production ? PRODUCTION_BACKEND_URL : "");
 
   if (!backendUrl || backendUrl === URL_PLACEHOLDER) {
     return { error: "BACKEND_API_URL is not configured" };
@@ -78,12 +80,27 @@ function readProxyConfiguration(mode) {
     return { error: "BACKEND_API_URL must use http or https" };
   }
 
+  if (target.username || target.password || target.search || target.hash) {
+    return { error: "BACKEND_API_URL must not include credentials, a query or a fragment" };
+  }
+
+  if (production && target.protocol !== "https:") {
+    return { error: "BACKEND_API_URL must use https for production" };
+  }
+
+  return { target: target.toString().replace(/\/+$/, "") };
+}
+
+function readProxyConfiguration(environment, backend) {
+  if (backend.error) return backend;
+  const backendToken = environment.BACKEND_API_TOKEN?.trim() ?? "";
+
   if (!backendToken || backendToken === TOKEN_PLACEHOLDER) {
     return { error: "BACKEND_API_TOKEN is not configured" };
   }
 
   return {
-    target: target.toString().replace(/\/$/, ""),
+    target: backend.target,
     token: backendToken,
   };
 }
@@ -136,8 +153,14 @@ function proxyRequestGuard(configurationError) {
   };
 }
 
-export default defineConfig(({ mode }) => {
-  const proxyConfiguration = readProxyConfiguration(mode);
+export default defineConfig(({ mode, command }) => {
+  // loadEnv with an empty prefix stays server-side. Explicitly expose just one
+  // public API root; the development proxy token never enters define/envPrefix.
+  const environment = loadEnv(mode, process.cwd(), "");
+  const production = command === "build";
+  const backend = resolveBackendUrl(environment, { production });
+  if (production && backend.error) throw new Error(backend.error);
+  const proxyConfiguration = readProxyConfiguration(environment, backend);
   const proxy = proxyConfiguration.error
     ? undefined
     : {
@@ -180,6 +203,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: "/known-by/",
+    define: {
+      __KNOWNBY_API_ROOT__: JSON.stringify(production ? `${backend.target}/v1` : "/api/v1"),
+    },
     plugins: [react(), proxyRequestGuard(proxyConfiguration.error)],
     server: proxy ? { proxy } : undefined,
   };

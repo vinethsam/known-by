@@ -1,4 +1,6 @@
-const API_ROOT = "/api/v1";
+// Vite resolves the public production destination once at build time. Local
+// development and unbundled tests keep the existing authenticated server proxy.
+const API_ROOT = typeof __KNOWNBY_API_ROOT__ === "string" ? __KNOWNBY_API_ROOT__ : "/api/v1";
 const JOB_STATUSES = new Set([
   "queued",
   "running",
