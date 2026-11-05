@@ -92,10 +92,11 @@ test("saved records retain per-field supplied certainty, conflicting values and 
   const saved = job.results.people[0];
   assert.equal(saved.row_index, 51);
   assert.equal(saved.result.profile.fields.full_name.confidence, null);
-  assert.equal(saved.result.profile.fields.job_title.research_confidence, 0);
+  assert.equal(saved.result.profile.fields.job_title.research_confidence, null);
+  assert.equal(saved.result.profile.fields.job_title.confidence, 0);
   assert.equal(saved.result.profile.fields.job_title.input_confidence, 100);
   assert.deepEqual(saved.result.profile.fields.organisation.supplied_values, ["Old Organisation"]);
-  assert.equal(saved.result.profile.fields.organisation.review_required, true);
+  assert.equal(saved.result.profile.fields.organisation.review_required, false);
   assert.deepEqual(saved.result.claims, []);
 });
 
@@ -112,7 +113,7 @@ test("saved high-confidence review flags survive and aggregate URLs are not clai
   assert.deepEqual(profile.saved_row_sources, ["https://example.org/whole-record"]);
 });
 
-test("legacy previews with blank standardized review columns retain confidence and provenance review rules", () => {
+test("legacy previews do not infer field review flags from confidence or provenance", () => {
   const job = libraryRecordsJob({ file: { file_id: "legacy", filename: "legacy.csv" }, offset: 0, records: [{
     organisation: "Earlier Organisation", organisation_confidence: 40, organisation_review_required: "",
     job_title: "Architect", job_title_confidence: 90, job_title_provenance_status: "conflicting", job_title_review_required: "",
@@ -120,8 +121,8 @@ test("legacy previews with blank standardized review columns retain confidence a
     subject: "Architecture", subject_confidence: 40, subject_review_required: "No",
   }] });
   const fields = job.results.people[0].result.profile.fields;
-  assert.equal(fields.organisation.review_required, true);
-  assert.equal(fields.job_title.review_required, true);
+  assert.equal(fields.organisation.review_required, false);
+  assert.equal(fields.job_title.review_required, false);
   assert.equal(fields.university_name.review_required, false);
   assert.equal(fields.subject.review_required, false);
 });
