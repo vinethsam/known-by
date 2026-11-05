@@ -40,17 +40,15 @@ export function libraryRecordsJob(page) {
           saved_row_sources: values(row.source_urls),
           seed_attributes: [],
           fields: Object.fromEntries(fields.map(([key]) => {
-            const confidence = number(row[`${key}_confidence`]);
+            const confidence = number(row[`${key}_research_confidence`]) ?? number(row[`${key}_confidence`]);
             const provenance = row[`${key}_provenance_status`] || null;
             return [key, {
               value: row[key] == null ? null : String(row[key]),
-              confidence, research_confidence: confidence,
+              confidence, research_confidence: number(row[`${key}_research_confidence`]),
               input_confidence: number(row[`${key}_input_confidence`]),
               provenance_status: provenance,
               supplied_values: values(row[`${key}_supplied_values`]),
-              review_required: row[`${key}_review_required`] != null && row[`${key}_review_required`] !== ""
-                ? truthy(row[`${key}_review_required`])
-                : Boolean(row[key]) && (provenance === "supplied" || provenance === "conflicting" || (confidence !== null && confidence < 50)),
+              review_required: truthy(row[`${key}_review_required`]),
               review_reason_codes: values(row[`${key}_review_reasons`]) || [],
               sources: values(row[`${key}_source_urls`]),
             }];

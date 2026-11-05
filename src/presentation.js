@@ -53,6 +53,18 @@ export function getFieldConfidence(decision) {
   return { value: decision?.confidence, label: "confidence" };
 }
 
+export function getResearchConfidence(decision) {
+  const score = decision?.research_confidence;
+  if (typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 100) return score;
+  // Older artifacts can retain only the legacy confidence column. Never turn
+  // known input certainty into a research score when that distinction is absent.
+  if (decision?.provenance_status === "supplied" ||
+      decision?.scoring_components?.confidence_kind === "seed_input_certainty" ||
+      (decision?.input_confidence === 100 && !["researched", "corroborated", "conflicting", "superseded", "mixed"].includes(decision?.provenance_status))) return null;
+  const legacy = decision?.confidence;
+  return typeof legacy === "number" && Number.isFinite(legacy) && legacy >= 0 && legacy <= 100 ? legacy : null;
+}
+
 export function formatInputValue(value) {
   if (value === null || value === undefined) return "—";
   return typeof value === "object" ? JSON.stringify(value) : String(value);

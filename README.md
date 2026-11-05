@@ -46,8 +46,10 @@ exports are downloaded from the backend.
 The shared field configuration displays Full Name,
 Organisation, Job Title, University Name, Degree Type, Subject, and Profile
 Link in that order across person results, batch tables, and loading states.
-The main table contains values only; confidence and provenance remain available
-in field details. CSV/XLSX downloads contain the seven values, six research
+The main table shows research confidence and explicit field Review indicators
+beneath values inside the same seven columns. Input certainty never substitutes
+for research confidence; full provenance remains available in field details.
+CSV/XLSX downloads contain the seven values, six research
 confidence scores and Source URLs, including downloads of historical records.
 
 History is kept for the current browser session only.

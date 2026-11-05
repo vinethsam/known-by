@@ -173,7 +173,7 @@ test("legacy results without university render safely without inferring universi
     field: "university_name", label: "University Name", person, request,
   });
   assert.match(card, /Not found/);
-  assert.match(card, /— confidence/);
+  assert.doesNotMatch(card, /% confidence|— confidence/);
   assert.doesNotMatch(card, /Unverified input university|Lake University|undefined|NaN/);
 
   const drawer = render("EvidenceDrawer", {
@@ -200,7 +200,10 @@ test("batch results and batch skeleton retain all seven columns in the same orde
     assert.deepEqual(labelsIn(html, /<th scope="col">([^<]+)</g), expectedLabels);
   }
   assert.match(table, /Lake University/);
-  assert.doesNotMatch(table, /87%|review-dot|field-meta|input certainty|research confidence/);
+  assert.match(table, /87% confidence/);
+  assert.match(table, /class="review-dot">Review/);
+  assert.match(table, /Review Required/);
+  assert.doesNotMatch(table, /input certainty/);
   assert.equal((table.match(/<td>/g) || []).length, 7);
   assert.equal((loading.match(/<td>/g) || []).length, 14);
 });
@@ -221,6 +224,55 @@ test("batch rows retain input order in state while displaying ascending row numb
   assert.deepEqual(people.map((person) => person.row_index), [2, 1]);
 });
 
+test("table confidence stays field-specific and review uses explicit backend flags", () => {
+  const person = personWithUniversity();
+  person.result.profile.fields.organisation = { value: "Example Organisation", confidence: 100, research_confidence: 62, review_required: true };
+  person.result.profile.fields.job_title = { value: "Analyst", confidence: 24, review_required: false };
+  person.result.profile.fields.degree_type = { value: "Master's Degree", confidence: null, review_required: false };
+  person.result.profile.fields.subject = { value: null, confidence: null, review_required: false };
+  person.result.profile.fields.profile_link = { value: "https://example.org/profile", research_confidence: 91, review_required: false };
+  const table = render("BatchTable", { job: { status: "completed", results: { people: [person] } } });
+  const cells = [...table.matchAll(/<td>([\s\S]*?)<\/td>/g)].map((match) => match[1]);
+  assert.equal(cells.length, 7);
+  assert.match(cells[1], /Example Organisation[\s\S]*62% confidence[\s\S]*class="review-dot">Review/);
+  assert.doesNotMatch(cells[1], /100%/);
+  assert.match(cells[2], /24% confidence/);
+  assert.doesNotMatch(cells[2], /review-dot/);
+  assert.doesNotMatch(cells[4], /confidence|review-dot/);
+  assert.match(cells[5], /Not found/);
+  assert.doesNotMatch(cells[5], /confidence|review-dot/);
+  assert.match(cells[6], /91% confidence/);
+});
+
+test("saved previews retain review metadata without inventing low-confidence review flags", () => {
+  const job = libraryRecordsJob({ file: { file_id: "scores", filename: "legacy.csv" }, offset: 0, records: [{
+    full_name: "Person", status: "failed", organisation: "Employer", organisation_confidence: 22,
+    job_title: "Director", job_title_confidence: 99, job_title_review_required: true,
+    university_name: "University", university_name_confidence: 100, university_name_research_confidence: 73,
+    full_name_confidence: 100, full_name_input_confidence: 100, full_name_provenance_status: "supplied",
+  }] });
+  const person = job.results.people[0];
+  assert.equal(person.result.profile.fields.organisation.review_required, false);
+  assert.equal(person.result.profile.fields.job_title.review_required, true);
+  const cells = [...render("BatchTable", { job }).matchAll(/<td>([\s\S]*?)<\/td>/g)].map((match) => match[1]);
+  assert.match(cells[0], /Failed/);
+  assert.doesNotMatch(cells[0], /100% confidence/);
+  assert.match(cells[1], /22% confidence/);
+  assert.doesNotMatch(cells[1], /review-dot/);
+  assert.match(cells[2], /99% confidence[\s\S]*review-dot/);
+  assert.match(cells[3], /73% confidence/);
+});
+
+test("diagnostic details retain long labels and identifiers without dropping data", () => {
+  const person = personWithUniversity({ ...universityDecision, scoring_components: {
+    seed_corroborating_claim_ids: ["2f0b95f6-d3c8-4eae-905d-4c00cfd7476c", "365efca0-aa7d-4bcc-8d03-d9fa17d575a0"],
+  } });
+  const drawer = render("EvidenceDrawer", { selection: { field: "university_name", person, request } });
+  assert.match(drawer, /<dt>Seed Corroborating Claim Ids<\/dt>/);
+  assert.match(drawer, /2f0b95f6-d3c8-4eae-905d-4c00cfd7476c/);
+  assert.match(drawer, /365efca0-aa7d-4bcc-8d03-d9fa17d575a0/);
+});
+
 test("supplied university stays distinct from missing independent research", () => {
   const person = personWithUniversity();
   person.result.profile.fields.university_name = {
@@ -238,9 +290,9 @@ test("supplied university stays distinct from missing independent research", () 
     field: "university_name", label: "University Name", person, request,
   });
   assert.match(card, /Not found/);
-  assert.match(card, /0%.*research confidence/);
+  assert.match(card, /0% confidence/);
   assert.match(card, /Supplied input; not independently verified/);
-  assert.doesNotMatch(card, /100%.*research confidence|Original batch|private@example/);
+  assert.doesNotMatch(card, /100%.*confidence|Original batch|private@example/);
 
   const drawer = render("EvidenceDrawer", { selection: { field: "university_name", person, request } });
   assert.match(drawer, /Supplied information/);
@@ -262,8 +314,8 @@ test("corroborated and conflicting seed values retain both provenance and eviden
       supplied_values: ["Supplied university"], input_confidence: 100, provenance_status,
     });
     const card = render("FieldCard", { field: "university_name", label: "University Name", person, request });
-    assert.match(card, /87%.*research confidence/);
-    assert.doesNotMatch(card, /100%.*research confidence/);
+    assert.match(card, /87% confidence/);
+    assert.doesNotMatch(card, /100%.*confidence/);
     const drawer = render("EvidenceDrawer", { selection: { field: "university_name", person, request } });
     assert.match(drawer, /Supplied university/);
     assert.match(drawer, /100% input certainty/);
@@ -275,7 +327,7 @@ test("corroborated and conflicting seed values retain both provenance and eviden
   }
 });
 
-test("immutable supplied name labels its 100 percent as input certainty", () => {
+test("immutable supplied name keeps input certainty only in the detailed record", () => {
   const person = personWithUniversity();
   person.result.profile.fields.full_name = {
     value: "Test Person", confidence: 100, input_confidence: 100,
@@ -283,8 +335,8 @@ test("immutable supplied name labels its 100 percent as input certainty", () => 
     scoring_components: { confidence_kind: "seed_input_certainty" },
   };
   const card = render("FieldCard", { field: "full_name", label: "Full Name", person, request });
-  assert.match(card, /100%.*input certainty/);
-  assert.doesNotMatch(card, /100%.*research confidence|100% confidence/);
+  assert.match(card, /0% confidence/);
+  assert.doesNotMatch(card, /100%|input certainty/);
   const table = render("BatchTable", {
     job: { kind: "file", status: "completed", results: { people: [person] } },
   });
@@ -303,7 +355,7 @@ test("a different researched university never inherits supplied input certainty"
   };
   const card = render("FieldCard", { field: "university_name", label: "University Name", person, request });
   assert.match(card, /Researched University/);
-  assert.match(card, /83%.*research confidence/);
+  assert.match(card, /83% confidence/);
   assert.doesNotMatch(card, /100%/);
   const drawer = render("EvidenceDrawer", { selection: { field: "university_name", person, request } });
   assert.match(drawer, /Supplied University/);

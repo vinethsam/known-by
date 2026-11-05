@@ -8,7 +8,20 @@ import {
   getConnectionState,
   getJobProgressSummary,
   getSavedBy,
+  getResearchConfidence,
 } from "../src/presentation.js";
+
+test("research confidence never uses seed certainty or manufactures unavailable scores", () => {
+  assert.equal(getResearchConfidence({ confidence: 100, research_confidence: 62, input_confidence: 100 }), 62);
+  assert.equal(getResearchConfidence({ confidence: 100, provenance_status: "supplied" }), null);
+  assert.equal(getResearchConfidence({ confidence: 100, scoring_components: { confidence_kind: "seed_input_certainty" } }), null);
+  assert.equal(getResearchConfidence({ confidence: 100, input_confidence: 100 }), null);
+  assert.equal(getResearchConfidence({ confidence: 81, input_confidence: 100, provenance_status: "corroborated" }), 81);
+  assert.equal(getResearchConfidence({ confidence: 0, research_confidence: 0 }), 0);
+  for (const value of [undefined, null, NaN, Infinity, "88", -1, 101]) {
+    assert.equal(getResearchConfidence({ confidence: value }), null);
+  }
+});
 
 test("scoring diagnostics round only display values", () => {
   const raw = 0.8400000000000001;

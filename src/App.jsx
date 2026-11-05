@@ -30,7 +30,7 @@ import {
 } from "./api.js";
 import { fields } from "./data.js";
 import { canSaveJob, fetchTerminalResults, isTransientReadError, recoveryDelay, resultState } from "./results-state.js";
-import { formatInputValue, formatLibraryError, formatScoringValue, getConnectionState, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary, getPersonProfile, getRelationshipLabel } from "./presentation.js";
+import { formatInputValue, formatLibraryError, formatScoringValue, getConnectionState, getFieldConfidence, getFieldProvenanceLabel, getJobProgress, getJobProgressSummary, getPersonProfile, getRelationshipLabel, getResearchConfidence } from "./presentation.js";
 import AnimatedBackground from "./background/AnimatedBackground.jsx";
 import DatabaseStackIcon from "./DatabaseStackIcon.jsx";
 import SharedLibrary from "./SharedLibrary.jsx";
@@ -664,7 +664,7 @@ function ProfileSummary({ person }) {
 
 function FieldCard({ field, label, person, request, onSelect }) {
   const decision = getPersonProfile(person)?.fields?.[field];
-  const confidence = getFieldConfidence(decision);
+  const confidence = getResearchConfidence(decision);
   const provenanceLabel = getFieldProvenanceLabel(decision);
   const linkedSourceCount = unique(
     decision?.supporting_source_ids ?? [],
@@ -689,11 +689,11 @@ function FieldCard({ field, label, person, request, onSelect }) {
         {decision?.value || "Not found"}
       </span>
       <span className="field-meta">
-        <span>{formatPercent(confidence.value)} {confidence.label}</span>
+        {confidence !== null && <span>{formatPercent(confidence)} confidence</span>}
         <span className="field-source-count">
           {sourceCount} {sourceCount === 1 ? "source" : "sources"}
         </span>
-        {decision?.review_required && (
+        {decision?.review_required === true && (
           <span className="review-dot">Review</span>
         )}
       </span>
@@ -813,6 +813,8 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
             <tr key={person.person_id || person.row_index}>
               {fields.map(([key, label]) => {
                 const decision = getPersonProfile(person)?.fields?.[key];
+                const confidence = getResearchConfidence(decision);
+                const reviewRequired = decision?.review_required === true;
                 const originalName =
                   person.original_row?.full_name ??
                   person.original_row?.name ??
@@ -841,6 +843,15 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
                       <span className="field-result-value" title={value || undefined}>
                         {value || "Not found"}
                       </span>
+                      {(confidence !== null || reviewRequired) && (
+                        <span className="field-meta">
+                          {confidence !== null && <span>{formatPercent(confidence)} confidence</span>}
+                          {reviewRequired && <span className="review-dot">Review</span>}
+                        </span>
+                      )}
+                      {key === "full_name" && person.status && (
+                        <span className="person-row-status"><StatusBadge status={person.status} /></span>
+                      )}
                     </button>
                   </td>
                 );

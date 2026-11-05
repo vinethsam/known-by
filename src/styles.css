@@ -1410,6 +1410,12 @@ input:disabled {
 .result-cell .field-meta {
   flex-wrap: wrap;
   gap: 4px 8px;
+  min-width: 0;
+  font-style: normal;
+  line-height: 1.5;
+}
+.result-cell .field-meta > span {
+  white-space: nowrap;
 }
 .person-row-status {
   display: inline-flex;
@@ -1420,6 +1426,17 @@ input:disabled {
   font-size: 9px;
   line-height: 1.4;
   white-space: nowrap;
+}
+.person-row-status .status-badge {
+  gap: 5px;
+  padding: 3px 6px;
+  font-size: 9px;
+  font-style: normal;
+}
+.person-row-status .status-badge svg {
+  width: 11px;
+  height: 11px;
+  flex-basis: 11px;
 }
 .terminal-empty {
   min-height: 210px;
@@ -1677,7 +1694,7 @@ a.field-value:hover {
 }
 .scoring-grid > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(92px, auto);
+  grid-template-columns: minmax(9rem, 0.9fr) minmax(0, 1.2fr);
   gap: 6px 14px;
   align-items: baseline;
   padding: 9px 0;
@@ -1689,9 +1706,12 @@ a.field-value:hover {
 .scoring-grid dt {
   min-width: 0;
   color: #aeb8d1;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.6;
 }
 .scoring-grid dd {
+  grid-column: 2;
   min-width: 0;
   margin: 0;
   color: #e2e6f3;
@@ -2387,6 +2407,14 @@ dialog::backdrop {
   }
 }
 @media (max-width: 480px) {
+  .scoring-grid > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .scoring-grid dd {
+    grid-column: 1;
+    text-align: left;
+  }
   .topbar {
     height: auto;
     min-height: 108px;
