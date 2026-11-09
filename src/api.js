@@ -1,6 +1,5 @@
-// Vite resolves the public production destination once at build time. Local
-// development and unbundled tests keep the existing authenticated server proxy.
-const API_ROOT = typeof __KNOWNBY_API_ROOT__ === "string" ? __KNOWNBY_API_ROOT__ : "/api/v1";
+// Vite supplies the public HTTPS destination for development and production.
+const API_ROOT = typeof __KNOWNBY_API_ROOT__ === "string" ? __KNOWNBY_API_ROOT__ : "";
 const JOB_STATUSES = new Set([
   "queued",
   "running",
@@ -38,14 +37,6 @@ const accountListeners = new Set();
 const signInListeners = new Set();
 
 export const getSignedInUser = () => signedInUser;
-
-export function browserSignInRequired() {
-  return !(
-    typeof __KNOWNBY_DEVELOPMENT_PROXY__ !== "undefined" &&
-    __KNOWNBY_DEVELOPMENT_PROXY__ === true &&
-    ["localhost", "127.0.0.1", "[::1]"].includes(globalThis.location?.hostname)
-  );
-}
 
 export function subscribeToAccount(listener) {
   accountListeners.add(listener);
@@ -177,7 +168,7 @@ function requestFailure(error) {
 
 async function fetchFromApi(path, init = {}, credential = googleCredential) {
   try {
-    if (globalThis.location && browserSignInRequired() && !API_ROOT.startsWith("https://")) {
+    if (!API_ROOT.startsWith("https://")) {
       throw new ApiError("KnownBy is missing its secure API configuration. Please contact the KnownBy administrator.", {
         code: "INVALID_API_CONFIGURATION",
       });

@@ -9,11 +9,17 @@ const expectedRoot = `${new URL(expectedBackend).href.replace(/\/+$/, "")}/v1`;
 const config = configure({ mode: "production", command: "build" });
 const apiRoot = JSON.parse(config.define.__KNOWNBY_API_ROOT__);
 assert.equal(apiRoot, expectedRoot, "Resolved production backend differs from the required destination");
-assert.equal(config.define.__KNOWNBY_DEVELOPMENT_PROXY__, "false", "Production must require Google sign-in");
-assert.equal(config.server?.proxy, undefined, "Production must omit the local proxy");
 const preview = configure({ mode: "production", command: "serve", isPreview: true });
-assert.equal(preview.define.__KNOWNBY_DEVELOPMENT_PROXY__, "false", "Preview must require Google sign-in");
-assert.equal(preview.server?.proxy, undefined, "Preview must omit the local proxy");
+const development = configure({ mode: "development", command: "serve" });
+for (const environment of [config, preview, development]) {
+  assert.equal(environment.define.__KNOWNBY_API_ROOT__, JSON.stringify(expectedRoot));
+  assert.equal(environment.define.__KNOWNBY_DEVELOPMENT_PROXY__, undefined, "Google sign-in must not have a proxy bypass");
+  assert.equal(environment.server?.proxy, undefined, "Browser requests must use the direct HTTPS API");
+}
+assert.equal(development.server.host, "localhost");
+assert.equal(development.server.port, 5173);
+assert.equal(development.server.strictPort, true);
+assert.equal(development.server.headers["Referrer-Policy"], "no-referrer-when-downgrade");
 
 // Inspect the actual entry shipped to Pages, rather than accepting build success.
 const html = await readFile("dist/index.html", "utf8");
@@ -28,8 +34,6 @@ assert.ok(bundle.includes("https://accounts.google.com/gsi/client"), "Production
 
 // Exercise both submission paths with fetch completely mocked: never start research.
 globalThis.__KNOWNBY_API_ROOT__ = apiRoot;
-globalThis.__KNOWNBY_DEVELOPMENT_PROXY__ = JSON.parse(config.define.__KNOWNBY_DEVELOPMENT_PROXY__);
-globalThis.location = new URL("http://127.0.0.1:4173/known-by/");
 const requests = [];
 globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
@@ -38,7 +42,6 @@ globalThis.fetch = async (url, options) => {
   return new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } });
 };
 const api = await import("../src/api.js?production-configuration-check");
-assert.equal(api.browserSignInRequired(), true, "A local preview must also require Google sign-in");
 await api.researchPerson({ full_name: "Configuration Check" });
 await api.researchBatch(new File(["name\nConfiguration Check\n"], "check.csv"));
 await api.listLibraryFiles();

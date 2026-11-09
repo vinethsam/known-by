@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import {
+const apiRoot = "https://research.example.test/v1";
+globalThis.__KNOWNBY_API_ROOT__ = apiRoot;
+const {
   ApiError,
   authenticateGoogle,
-  browserSignInRequired,
   cancelJob,
   deleteLibraryFile,
   downloadExport,
@@ -20,7 +21,7 @@ import {
   saveJobToLibrary,
   signOut,
   subscribeToSignInRequired,
-} from "../src/api.js";
+} = await import("../src/api.js");
 
 const originalFetch = globalThis.fetch;
 const originalDocument = globalThis.document;
@@ -82,7 +83,7 @@ test("saved records use authenticated pagination and reject malformed or unautho
   const payload = { file: savedFile, records: [{ full_name: "Ada Example" }], total: 51, offset: 50, limit: 50, has_more: false };
   globalThis.fetch = async (url, init) => { request = { url, init }; return jsonResponse(payload); };
   assert.deepEqual(await getLibraryRecords("file/id", { offset: 50, q: "Ada & Example" }), payload);
-  assert.equal(request.url, "/api/v1/library/files/file%2Fid/records?limit=50&offset=50&q=Ada+%26+Example");
+  assert.equal(request.url, `${apiRoot}/library/files/file%2Fid/records?limit=50&offset=50&q=Ada+%26+Example`);
   assert.equal(request.init.credentials, "same-origin");
   assert.throws(() => getLibraryRecords("id", { limit: 101 }), /Invalid saved-record page/);
   globalThis.fetch = async () => jsonResponse({ ...payload, records: "bad" });
@@ -122,23 +123,14 @@ describe("KnownBy browser API", { concurrency: false }, () => {
   const googleUser = () => ({ authentication: "google", subject: "google-user-id",
     email: "approved@example.test", can_delete: false, expires_at: Math.floor(Date.now() / 1000) + 3600 });
 
-  test("requires explicit loopback development mode and rejects a missing public API root", async () => {
-    const originalLocation = globalThis.location;
-    globalThis.location = new URL("https://vinethsam.github.io/known-by/");
-    globalThis.fetch = () => assert.fail("A published app must not request the development proxy");
+  test("rejects a missing secure API root before making any request", async () => {
+    delete globalThis.__KNOWNBY_API_ROOT__;
+    globalThis.fetch = () => assert.fail("An unconfigured app must not make an API request");
     try {
-      assert.equal(browserSignInRequired(), true);
-      await assert.rejects(getAuthConfig(), { code: "INVALID_API_CONFIGURATION" });
-
-      globalThis.__KNOWNBY_DEVELOPMENT_PROXY__ = true;
-      assert.equal(browserSignInRequired(), true);
-      await assert.rejects(getAuthConfig(), { code: "INVALID_API_CONFIGURATION" });
-
-      globalThis.location = new URL("http://127.0.0.1:5173/known-by/");
-      assert.equal(browserSignInRequired(), false);
+      const unconfigured = await import("../src/api.js?no-api-root");
+      await assert.rejects(unconfigured.getAuthConfig(), { code: "INVALID_API_CONFIGURATION" });
     } finally {
-      globalThis.location = originalLocation;
-      delete globalThis.__KNOWNBY_DEVELOPMENT_PROXY__;
+      globalThis.__KNOWNBY_API_ROOT__ = apiRoot;
     }
   });
 
@@ -236,7 +228,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     }
   });
 
-  test("uses the person contract and only the relative proxy URL", async () => {
+  test("uses the person contract and the configured HTTPS API URL", async () => {
     const signal = new AbortController().signal;
     let request;
     globalThis.fetch = async (url, init) => {
@@ -249,7 +241,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
       { signal },
     );
 
-    assert.equal(request.url, "/api/v1/research/person");
+    assert.equal(request.url, `${apiRoot}/research/person`);
     assert.equal(request.init.method, "POST");
     assert.equal(request.init.signal, signal);
     assert.deepEqual(JSON.parse(request.init.body), {
@@ -272,7 +264,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
 
     await researchBatch(file, { nameColumn: "name" });
 
-    assert.equal(request.url, "/api/v1/research/batch");
+    assert.equal(request.url, `${apiRoot}/research/batch`);
     assert.equal(request.init.method, "POST");
     assert.equal(request.init.body.get("file"), file);
     assert.equal(request.init.body.get("name_column"), "name");
@@ -319,9 +311,9 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     assert.deepEqual(
       requests.map(({ url }) => url),
       [
-        "/api/v1/jobs/job%2Fid",
-        "/api/v1/jobs/job%2Fid/results",
-        "/api/v1/jobs/job%2Fid/cancel",
+        `${apiRoot}/jobs/job%2Fid`,
+        `${apiRoot}/jobs/job%2Fid/results`,
+        `${apiRoot}/jobs/job%2Fid/cancel`,
       ],
     );
     assert.equal(requests[2].init.method, "POST");
@@ -392,7 +384,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
 
     const result = await saveJobToLibrary("job/id", { signal });
 
-    assert.equal(request.url, "/api/v1/jobs/job%2Fid/library");
+    assert.equal(request.url, `${apiRoot}/jobs/job%2Fid/library`);
     assert.equal(request.init.method, "POST");
     assert.equal(request.init.signal, signal);
     assert.deepEqual(JSON.parse(request.init.body), {
@@ -412,7 +404,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
 
     const result = await listLibraryFiles({ limit: 25, offset: 50, signal });
 
-    assert.equal(request.url, "/api/v1/library/files?limit=25&offset=50");
+    assert.equal(request.url, `${apiRoot}/library/files?limit=25&offset=50`);
     assert.equal(request.init.signal, signal);
     assert.deepEqual(result, [savedFile]);
 
@@ -482,7 +474,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     };
 
     assert.equal(await deleteLibraryFile("file/id"), true);
-    assert.equal(request.url, "/api/v1/library/files/file%2Fid");
+    assert.equal(request.url, `${apiRoot}/library/files/file%2Fid`);
     assert.equal(request.init.method, "DELETE");
   });
 
@@ -600,7 +592,7 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const state = download.state();
 
-    assert.equal(requestUrl, "/api/v1/jobs/job-1/export?format=csv");
+    assert.equal(requestUrl, `${apiRoot}/jobs/job-1/export?format=csv`);
     assert.equal(state.clicked, true);
     assert.equal(state.downloadedAs, "research results.csv");
     assert.equal(state.revoked, "blob:test-export");
@@ -623,12 +615,12 @@ describe("KnownBy browser API", { concurrency: false }, () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const state = download.state();
 
-    assert.equal(requestUrl, "/api/v1/library/files/file%2Fid");
+    assert.equal(requestUrl, `${apiRoot}/library/files/file%2Fid`);
     assert.equal(state.downloadedAs, savedFile.filename);
     assert.equal(result.filename, savedFile.filename);
     assert.equal(result.filename.includes(savedFile.file_id), false);
     const alternate = await downloadLibraryFile(savedFile, { format: "xlsx" });
-    assert.equal(requestUrl, "/api/v1/library/files/file%2Fid?format=xlsx");
+    assert.equal(requestUrl, `${apiRoot}/library/files/file%2Fid?format=xlsx`);
     assert.equal(alternate.filename, savedFile.filename.replace(/\.csv$/, ".xlsx"));
   });
 

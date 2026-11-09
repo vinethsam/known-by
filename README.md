@@ -4,36 +4,34 @@ Internal people research and file enrichment frontend.
 
 ## Run locally
 
-Use Node.js 20.19+ or 22.12+ and npm. First copy the two values from
-`.env.example` into `.env.local`:
-
-```dotenv
-BACKEND_API_URL=https://your-railway-backend.example
-BACKEND_API_TOKEN=your-api-access-token
-```
-
-The development server adds the server-held bearer token while proxying browser
-requests from `/api/*` to the configured backend. The token stays server-side.
-
-Static builds resolve `BACKEND_API_URL` (or the `VITE_BACKEND_API_URL` alias) and
-compile one public `/v1` API root into the browser. If neither is supplied, production
-uses `https://known-by-backend-production.up.railway.app`. Invalid explicit URLs fail
-the build. Local URL overrides and the authenticated development proxy are preserved.
-The Pages workflow checks the emitted entry and mocked submission destinations.
-
-GitHub Pages uses Google sign-in rather than Vite's development proxy. Railway
-provides the public Google client ID through `/v1/auth/config`, verifies each
-user credential and enforces its approved-email allowlist. Configure the Google
-Web client's authorized JavaScript origin as `https://vinethsam.github.io` and
-allow that exact origin in backend CORS. No Google client secret or server API
-key belongs in the static frontend.
+Use Node.js 20.19+ or 22.12+ and npm. Local development and GitHub Pages
+both use Google Sign-In and default to the public KnownBy Railway API.
+An alternate backend can be set with `BACKEND_API_URL` in `.env.local`
+(`VITE_BACKEND_API_URL` is also accepted). Use an HTTPS API base URL.
+Railway returns the public Google client ID through `/v1/auth/config`,
+verifies each Google credential and enforces its approved-email allowlist.
+Keep Google client secrets and server API tokens out of the frontend environment.
 
 ```sh
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. `npm run build` creates the production build in `dist`; `npm run preview` serves it locally.
+Open `http://localhost:5173/known-by/`, select **Account**, and choose
+**Continue with Google**. Use an approved account and open **Database** to
+verify access without starting research. Navigate between pages in the same
+tab to check that the session stays active. Refreshing, opening a new tab,
+signing out, or reaching credential expiry requires signing in again.
+
+The Google Web client's **Authorized JavaScript origins** should include
+`https://vinethsam.github.io`, `http://localhost`, and
+`http://localhost:5173`. Railway CORS must include
+`https://vinethsam.github.io` and `http://localhost:5173`. These settings
+use origins without a path. Use `localhost` as documented, since
+`127.0.0.1` is a separate origin. [Google Sign-In setup](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)
+
+`npm run build` creates the production build in `dist`. The Pages workflow
+checks the emitted API root and mocked request destinations.
 
 ## Research flow
 

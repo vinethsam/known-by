@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowRight, LockKeyhole, UserRound, X } from "lucide-react";
 import { useGlassSurface } from "../glass/useGlassSurface.js";
-import { authenticateGoogle, browserSignInRequired, formatApiError, getAuthConfig, getSignedInUser, signOut, subscribeToAccount } from "../api.js";
+import { authenticateGoogle, formatApiError, getAuthConfig, getSignedInUser, signOut, subscribeToAccount } from "../api.js";
 import { renderGoogleSignIn } from "./googleIdentity.js";
 import "./account.css";
 
@@ -14,7 +14,6 @@ export default function AccountDialog({ onClose }) {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
   const user = useSyncExternalStore(subscribeToAccount, getSignedInUser);
-  const developmentConnection = !browserSignInRequired();
   const titleId = useId();
   const descriptionId = useId();
   const availabilityId = useId();
@@ -22,7 +21,7 @@ export default function AccountDialog({ onClose }) {
   useGlassSurface(dialogRef, { surfaceOpacity: 0.34, borderRadius: 18 });
 
   useEffect(() => {
-    if (user || developmentConnection) return undefined;
+    if (user) return undefined;
     let stopped = false;
     let removeButton;
     const controller = new AbortController();
@@ -60,7 +59,7 @@ export default function AccountDialog({ onClose }) {
       controller.abort();
       removeButton?.();
     };
-  }, [user, developmentConnection]);
+  }, [user]);
 
   useEffect(() => {
     const panel = dialogRef.current;
@@ -123,29 +122,28 @@ export default function AccountDialog({ onClose }) {
         </button>
       </div>
 
-      <div className="account-state"><UserRound size={13} /> {user ? "Signed in" : developmentConnection ? "Development" : "Signed out"}</div>
+      <div className="account-state"><UserRound size={13} /> {user ? "Signed in" : "Signed out"}</div>
       <h2 id={titleId}>Your KnownBy account</h2>
       <p id={descriptionId} className="account-description">
-        {user ? user.email : developmentConnection ? "Local development connection" : "Sign in with your approved Google account."}
+        {user ? user.email : "Sign in with your approved Google account."}
       </p>
 
       <div className="account-provider">
         {user ? (
           <button className="account-google" type="button" onClick={signOut}>Sign out</button>
-        ) : !developmentConnection && (
+        ) : (
           <div ref={googleButton} className="account-google-button" aria-busy={loading || verifying} />
         )}
         <p id={availabilityId} className="account-availability" role={error ? "alert" : "status"}>
           <LockKeyhole size={13} aria-hidden="true" />
-          {user ? "Access verified by KnownBy." : error || (developmentConnection ?
-            "This session uses the configured development connection." : verifying ?
+          {user ? "Access verified by KnownBy." : error || (verifying ?
             "Verifying your account…" : loading ? "Loading Google sign-in…" :
             "Only approved accounts can access research and saved results.")}
         </p>
       </div>
 
       <div className="account-dialog-footer">
-        <p>{user || developmentConnection ? "You can continue to KnownBy." : "Sign in to research people and open the Database."}</p>
+        <p>{user ? "You can continue to KnownBy." : "Sign in to research people and open the Database."}</p>
         <button className="account-continue" type="button" onClick={() => setClosing(true)}>
           Continue to KnownBy <ArrowRight size={15} />
         </button>

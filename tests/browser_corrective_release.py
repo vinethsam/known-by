@@ -19,6 +19,7 @@ OUT = ROOT / ".qa" / "corrective-release"
 OUT.mkdir(parents=True, exist_ok=True)
 PORT = 5197
 ORIGIN = f"http://127.0.0.1:{PORT}"
+API_ORIGIN = "https://knownby-fixture.invalid"
 FIELDS = ["full_name", "organisation", "job_title", "university_name", "degree_type", "subject", "profile_link"]
 VALUES = ["Anna María McGill", "Ghana", "UNESCO", "Senior Research Analyst", "University of Ghana", "PhD", "Architecture", "https://example.org/a-very-long-biography-and-research-profile/anna-maria-mcgill"]
 saved = {"file_id": "fixture-file", "filename": "Research_2026-10-26.xlsx", "format": "xlsx", "available_formats": ["csv", "xlsx"], "can_delete": True, "saved_at": "2026-10-26T12:00:00Z", "research_started_at": "2026-10-26T11:59:00Z", "size_bytes": 128, "saved_by": "QA User"}
@@ -43,7 +44,7 @@ row.update(status="review_required", record_status="review_required", review_req
 
 def run():
     log = (OUT / "vite.log").open("w", encoding="utf-8")
-    server = subprocess.Popen([shutil.which("node"), "node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", str(PORT), "--strictPort"], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    server = subprocess.Popen([shutil.which("node"), "node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", str(PORT), "--strictPort"], cwd=ROOT, env={**os.environ, "BACKEND_API_URL": API_ORIGIN}, stdout=log, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     try:
         for _ in range(100):
             try:
@@ -53,41 +54,71 @@ def run():
             executable = os.environ.get("KNOWNBY_TEST_BROWSER", r"C:\Program Files\Google\Chrome\Application\chrome.exe")
             browser = p.chromium.launch(executable_path=executable, headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
+            context.add_init_script("""{
+                let signIn;
+                window.google = { accounts: { id: {
+                    initialize(config) { signIn = config.callback; },
+                    renderButton(container) {
+                        const button = document.createElement('button');
+                        button.textContent = 'Continue with Google';
+                        button.onclick = () => signIn({ credential: 'offline-test-credential' });
+                        container.append(button);
+                    },
+                } } };
+            }""")
             state = {"results": 0, "saves": 0, "deletes": 0, "files": [], "previews": [], "downloads": [], "denied": False}
             def route(request):
                 url = urlsplit(request.request.url)
+                origin = f"{url.scheme}://{url.netloc}"
                 path = url.path
-                if not request.request.url.startswith(ORIGIN):
-                    request.abort(); return
-                if not path.startswith("/api/"):
+                if origin == ORIGIN:
                     request.continue_(); return
-                def send(data, status=200): request.fulfill(status=status, content_type="application/json", body=json.dumps(data))
-                if state["denied"]: send({"detail": "Authorization required"}, 401); return
-                if path == "/api/v1/research/batch": send({"job_id": "fixture-job", "status": "queued", "total_people": 2}); return
-                if path == "/api/v1/jobs/fixture-job": send({"job_id": "fixture-job", "status": "partial", "total_people": 2, "counts": {"review_required": 1, "failed": 1}, "created_at": "2026-10-26T12:00:00Z"}); return
+                if origin != API_ORIGIN:
+                    request.abort(); return
+                headers = {"Access-Control-Allow-Origin": ORIGIN, "Access-Control-Expose-Headers": "Content-Disposition"}
+                if request.request.method == "OPTIONS":
+                    request.fulfill(status=204, headers={**headers, "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type"}); return
+                def send(data, status=200): request.fulfill(status=status, headers=headers, content_type="application/json", body=json.dumps(data))
+                if path == "/v1/auth/config": send({"enabled": True, "google_client_id": "offline-test.apps.googleusercontent.com"}); return
+                if state["denied"] or request.request.headers.get("authorization") != "Bearer offline-test-credential":
+                    send({"detail": "Authorization required"}, 401); return
+                if path == "/v1/auth/me":
+                    send({"authentication": "google", "subject": "offline-user", "email": "fixture@example.test", "expires_at": int(time.time()) + 3600, "can_delete": True}); return
+                if path == "/v1/research/batch": send({"job_id": "fixture-job", "status": "queued", "total_people": 2}); return
+                if path == "/v1/jobs/fixture-job": send({"job_id": "fixture-job", "status": "partial", "total_people": 2, "counts": {"review_required": 1, "failed": 1}, "created_at": "2026-10-26T12:00:00Z"}); return
                 if path.endswith("/results"):
                     state["results"] += 1
                     if state["results"] > 1: time.sleep(.5)
                     send({"job_id": "fixture-job", "status": "partial", "people": [] if state["results"] == 1 else [person]}); return
                 if path.endswith("/library"):
                     state["saves"] += 1; state["files"] = [saved]; send(saved, 201); return
-                if path == "/api/v1/library/files": send(state["files"]); return
+                if path == "/v1/library/files": send(state["files"]); return
                 if path.endswith("/records"):
                     query = parse_qs(url.query); offset = int(query.get("offset", [0])[0]); q = query.get("q", [""])[0]
                     state["previews"].append((offset, q))
                     records = [] if q == "missing" else [row] * (1 if offset else 50)
                     send({"file": saved, "records": records, "total": 0 if q else 51, "limit": 50, "offset": offset, "has_more": not offset and not q}); return
                 if path.endswith("/fixture-file") and request.request.method == "DELETE":
-                    state["deletes"] += 1; state["files"] = []; request.fulfill(status=204); return
+                    state["deletes"] += 1; state["files"] = []; request.fulfill(status=204, headers=headers); return
                 if path.endswith("/fixture-file"):
                     format = parse_qs(url.query).get("format", ["xlsx"])[0]
                     state["downloads"].append(format)
-                    request.fulfill(status=200, content_type="text/csv" if format == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="Research_2026-10-26.{format}"'}, body="Full Name\nAnna María McGill\n"); return
+                    request.fulfill(status=200, content_type="text/csv" if format == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={**headers, "Content-Disposition": f'attachment; filename="Research_2026-10-26.{format}"'}, body="Full Name\nAnna María McGill\n"); return
                 raise AssertionError(f"Unexpected API request: {path}")
             context.route("**/*", route)
             page = context.new_page()
-            page.goto(ORIGIN)
+            page.goto(f"{ORIGIN}/known-by/")
             page.wait_for_selector(".startup-sequence", state="detached", timeout=15000)
+
+            def sign_in(*, prompted=False):
+                account = page.get_by_role("dialog", name="Your KnownBy account")
+                if not prompted:
+                    page.get_by_role("button", name="Open account", exact=True).click()
+                account.get_by_role("button", name="Continue with Google").click()
+                expect(account.get_by_text("Access verified by KnownBy.")).to_be_visible()
+                account.get_by_role("button", name="Continue to KnownBy").click()
+
+            sign_in()
             page.locator('input[type="file"]').set_input_files({"name": "offline.csv", "mimeType": "text/csv", "buffer": b"Full Name\nAnna Example\nAnother Example\n"})
             page.evaluate("window.emptyFlashes=[]; new MutationObserver(()=>{if(/No person results were returned|No profile was returned/.test(document.body.innerText))window.emptyFlashes.push(document.body.innerText)}).observe(document.body,{subtree:true,childList:true,characterData:true})")
             page.get_by_role("button", name="Enrich file", exact=True).click()
@@ -152,6 +183,7 @@ def run():
             expect(page.get_by_text(saved["filename"], exact=True)).to_be_visible()
             state["files"] = [{**saved, "can_delete": False}]
             page.reload()
+            sign_in(prompted=True)
             page.get_by_role("button", name=f"Actions for {saved['filename']}", exact=True).click()
             assert page.get_by_role("menuitem", name="Delete", exact=True).count() == 0
             assert page.get_by_role("menu").evaluate("e=>{let r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight}")
@@ -159,6 +191,7 @@ def run():
             page.keyboard.press("Escape")
             state["files"] = [saved]
             page.reload()
+            sign_in(prompted=True)
             page.get_by_role("button", name=f"Actions for {saved['filename']}", exact=True).click()
             page.get_by_role("menuitem", name="Delete", exact=True).click()
             expect(page.get_by_role("dialog").get_by_text(saved["filename"], exact=True)).to_be_visible()

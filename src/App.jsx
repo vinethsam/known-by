@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import {
   cancelJob,
-  browserSignInRequired,
   downloadExport,
   getJob,
   getJobResults,
@@ -1310,7 +1309,7 @@ export default function App() {
     ) {
       return;
     }
-    if (browserSignInRequired() && !getSignedInUser()) {
+    if (!getSignedInUser()) {
       setAccountOpen(true);
       return;
     }
