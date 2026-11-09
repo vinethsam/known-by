@@ -153,15 +153,15 @@ function proxyRequestGuard(configurationError) {
   };
 }
 
-export default defineConfig(({ mode, command }) => {
-  // loadEnv with an empty prefix stays server-side. Explicitly expose just one
-  // public API root; the development proxy token never enters define/envPrefix.
+export default defineConfig(({ mode, command, isPreview }) => {
+  // Load configuration server-side and expose the public API root and auth mode.
   const environment = loadEnv(mode, process.cwd(), "");
   const production = command === "build";
+  const developmentProxy = command === "serve" && isPreview !== true;
   const backend = resolveBackendUrl(environment, { production });
   if (production && backend.error) throw new Error(backend.error);
-  const proxyConfiguration = readProxyConfiguration(environment, backend);
-  const proxy = proxyConfiguration.error
+  const proxyConfiguration = developmentProxy ? readProxyConfiguration(environment, backend) : null;
+  const proxy = !proxyConfiguration || proxyConfiguration.error
     ? undefined
     : {
         "/api": {
@@ -205,8 +205,9 @@ export default defineConfig(({ mode, command }) => {
     base: "/known-by/",
     define: {
       __KNOWNBY_API_ROOT__: JSON.stringify(production ? `${backend.target}/v1` : "/api/v1"),
+      __KNOWNBY_DEVELOPMENT_PROXY__: JSON.stringify(developmentProxy),
     },
-    plugins: [react(), proxyRequestGuard(proxyConfiguration.error)],
+    plugins: developmentProxy ? [react(), proxyRequestGuard(proxyConfiguration.error)] : [react()],
     server: proxy ? { proxy } : undefined,
   };
 });

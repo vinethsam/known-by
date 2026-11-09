@@ -38,7 +38,14 @@ const accountListeners = new Set();
 const signInListeners = new Set();
 
 export const getSignedInUser = () => signedInUser;
-export const browserSignInRequired = () => /^https?:\/\//i.test(API_ROOT);
+
+export function browserSignInRequired() {
+  return !(
+    typeof __KNOWNBY_DEVELOPMENT_PROXY__ !== "undefined" &&
+    __KNOWNBY_DEVELOPMENT_PROXY__ === true &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(globalThis.location?.hostname)
+  );
+}
 
 export function subscribeToAccount(listener) {
   accountListeners.add(listener);
@@ -170,6 +177,11 @@ function requestFailure(error) {
 
 async function fetchFromApi(path, init = {}, credential = googleCredential) {
   try {
+    if (globalThis.location && browserSignInRequired() && !API_ROOT.startsWith("https://")) {
+      throw new ApiError("KnownBy is missing its secure API configuration. Please contact the KnownBy administrator.", {
+        code: "INVALID_API_CONFIGURATION",
+      });
+    }
     const headers = new Headers(init.headers);
     if (credential) headers.set("Authorization", `Bearer ${credential}`);
     const response = await fetch(path, {

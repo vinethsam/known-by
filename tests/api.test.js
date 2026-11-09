@@ -4,6 +4,7 @@ import { afterEach, describe, test } from "node:test";
 import {
   ApiError,
   authenticateGoogle,
+  browserSignInRequired,
   cancelJob,
   deleteLibraryFile,
   downloadExport,
@@ -120,6 +121,26 @@ function installDownloadHarness() {
 describe("KnownBy browser API", { concurrency: false }, () => {
   const googleUser = () => ({ authentication: "google", subject: "google-user-id",
     email: "approved@example.test", can_delete: false, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+
+  test("requires explicit loopback development mode and rejects a missing public API root", async () => {
+    const originalLocation = globalThis.location;
+    globalThis.location = new URL("https://vinethsam.github.io/known-by/");
+    globalThis.fetch = () => assert.fail("A published app must not request the development proxy");
+    try {
+      assert.equal(browserSignInRequired(), true);
+      await assert.rejects(getAuthConfig(), { code: "INVALID_API_CONFIGURATION" });
+
+      globalThis.__KNOWNBY_DEVELOPMENT_PROXY__ = true;
+      assert.equal(browserSignInRequired(), true);
+      await assert.rejects(getAuthConfig(), { code: "INVALID_API_CONFIGURATION" });
+
+      globalThis.location = new URL("http://127.0.0.1:5173/known-by/");
+      assert.equal(browserSignInRequired(), false);
+    } finally {
+      globalThis.location = originalLocation;
+      delete globalThis.__KNOWNBY_DEVELOPMENT_PROXY__;
+    }
+  });
 
   test("verifies Google sign-in before retaining a memory-only credential and authenticates reads and downloads", async () => {
     const requests = [];
