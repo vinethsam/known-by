@@ -406,6 +406,18 @@ test("Save to Database is present for useful completed-with-issues results", () 
   assert.doesNotMatch(render("Results", { job: { ...job, results: null }, regionRef: { current: null } }), /Save to Database/);
 });
 
+test("a result persistence error preserves research fields and identifies the save failure", () => {
+  const person = { ...personWithUniversity(), status: "failed", error_code: "PERSISTENCE_FAILED" };
+  const job = { id: "save-failure", jobId: "save-failure", status: "failed", results: { people: [person] } };
+  const batch = render("BatchTable", { job: { ...job, kind: "file" } });
+  assert.match(batch, /Save failed/);
+  assert.match(batch, /Lake University/);
+  assert.match(batch, /87% confidence/);
+  const individual = render("Results", { job: { ...job, kind: "person" }, regionRef: { current: null } });
+  assert.match(individual, /The service could not save the final result/);
+  assert.doesNotMatch(individual, /Research failed|Save to Database/);
+});
+
 test("failed and cancelled supplied-only profiles preserve outcome without inventing review or completion", () => {
   for (const status of ["failed", "cancelled"]) {
     const person = { person_id: "seed", row_index: 1, status, result: null, original_row: {},

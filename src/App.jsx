@@ -116,6 +116,10 @@ function StatusBadge({ status, label }) {
   );
 }
 
+function resultSaveFailed(person) {
+  return person?.status === "failed" && person.error_code === "PERSISTENCE_FAILED";
+}
+
 function EvidenceDrawer({ selection, onClose }) {
   const dialog = useRef(null);
   const { field, person, request, row } = selection;
@@ -282,8 +286,9 @@ function EvidenceDrawer({ selection, onClose }) {
             <div>
               <strong>No field result</strong>
               <p>
-                The backend did not return a decision for this field
-                {person?.error_code ? ` (${person.error_code})` : "."}
+                {resultSaveFailed(person)
+                  ? "The service could not save the final result."
+                  : `The backend did not return a decision for this field${person?.error_code ? ` (${person.error_code})` : "."}`}
               </p>
             </div>
           </div>
@@ -635,7 +640,9 @@ function ProfileSummary({ person }) {
       <div className="summary-copy">
         <strong>{name || "Person result"}</strong>
         <span>
-          {["failed", "cancelled"].includes(person?.status)
+          {resultSaveFailed(person)
+            ? "The service could not save the final result."
+            : ["failed", "cancelled"].includes(person?.status)
             ? `Research ${person.status}${!person.result && person.supplied_fields ? "; supplied information retained" : ""}`
             : profile?.review_required
             ? "Review recommended"
@@ -655,7 +662,7 @@ function ProfileSummary({ person }) {
           <span>Sources used</span>
           <strong>{profile?.sources_used ?? 0}</strong>
         </div>
-        <StatusBadge status={person?.status || profile?.status} />
+        <StatusBadge status={person?.status || profile?.status} label={resultSaveFailed(person) ? "Save failed" : undefined} />
       </div>
     </div>
   );
@@ -849,7 +856,7 @@ const BatchTable = memo(function BatchTable({ job, onSelect }) {
                         </span>
                       )}
                       {key === "full_name" && person.status && (
-                        <span className="person-row-status"><StatusBadge status={person.status} /></span>
+                        <span className="person-row-status"><StatusBadge status={person.status} label={resultSaveFailed(person) ? "Save failed" : undefined} /></span>
                       )}
                     </button>
                   </td>
@@ -898,6 +905,10 @@ function Results({
   const progress = job ? getJobProgress(job) : null;
   const connection = getConnectionState(job);
   const alreadySaved = Boolean(job?.savedEntries?.both);
+  const saveFailed = job?.status === "failed" && job.results?.people?.some(resultSaveFailed);
+  const progressStage = saveFailed
+    ? job.kind === "person" ? "Result save failed" : "Batch finished with errors"
+    : progress?.stage;
 
   return (
     <section
@@ -986,7 +997,7 @@ function Results({
               label={!connection && job.status === "partial" && progress.finished === progress.total && progress.total > 0 ? "Completed with Issues" : undefined}
             />
             <span className="progress-stage">
-              {job.monitoringStopped ? "Status checks paused" : progress.stage}
+              {job.monitoringStopped ? "Status checks paused" : progressStage}
             </span>
             {job.kind === "file" && progress.total > 0 && (
               <span className="result-counts">
@@ -1078,6 +1089,8 @@ function Results({
                 <p>
                   {job.monitoringStopped
                     ? "Resume status checks when the service is available."
+                    : resultSaveFailed(person)
+                    ? "The service could not save the final result."
                     : person?.error_code
                     ? titleCase(person.error_code)
                     : job.error || `The job ended as ${titleCase(job.status)}.`}
